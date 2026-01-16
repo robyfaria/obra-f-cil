@@ -19,6 +19,9 @@ render_top_logo()
 
 st.title("📅 Agenda de Alocações")
 
+if 'data_agenda' not in st.session_state:
+    st.session_state['data_agenda'] = date.today()
+
 # ============================================
 # SELEÇÃO DE DATA
 # ============================================
@@ -27,25 +30,17 @@ col1, col2, col3 = st.columns([1, 2, 1])
 
 with col1:
     if st.button("⬅️ Dia Anterior"):
-        if 'data_agenda' not in st.session_state:
-            st.session_state['data_agenda'] = date.today()
         st.session_state['data_agenda'] = st.session_state['data_agenda'] - timedelta(days=1)
         st.rerun()
 
 with col2:
-    if 'data_agenda' not in st.session_state:
-        st.session_state['data_agenda'] = date.today()
-    
     data_selecionada = st.date_input(
         "📆 Data",
-        value=st.session_state['data_agenda'],
         key="data_agenda"
     )
 
 with col3:
     if st.button("➡️ Próximo Dia"):
-        if 'data_agenda' not in st.session_state:
-            st.session_state['data_agenda'] = date.today()
         st.session_state['data_agenda'] = st.session_state['data_agenda'] + timedelta(days=1)
         st.rerun()
 
