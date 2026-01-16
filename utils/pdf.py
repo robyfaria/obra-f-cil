@@ -155,36 +155,11 @@ def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -
         servicos = servicos_por_fase.get(fase['id'], [])
         
         if servicos:
-            # Cabeçalho da tabela
-            pdf.set_font('Helvetica', 'B', 9)
-            pdf.set_fill_color(230, 230, 230)
-            pdf.cell(70, 6, 'Serviço', border=1, fill=True)
-            pdf.cell(20, 6, 'Un.', border=1, fill=True, align='C')
-            pdf.cell(25, 6, 'Qtd', border=1, fill=True, align='C')
-            pdf.cell(30, 6, 'Valor Un.', border=1, fill=True, align='R')
-            pdf.cell(35, 6, 'Total', border=1, fill=True, align='R')
-            pdf.ln()
-            
-            # Linhas de serviços
             pdf.set_font('Helvetica', '', 9)
             for serv in servicos:
                 servico_info = serv.get('servicos', {})
                 nome = normalizar_texto(servico_info.get('nome'))
-                unidade = normalizar_texto(servico_info.get('unidade'))
-
-                linhas_nome = quebrar_texto_em_linhas(pdf, nome, 70)
-                altura_linha = 5
-                altura_total = altura_linha * max(1, len(linhas_nome))
-                x_inicial = pdf.get_x()
-                y_inicial = pdf.get_y()
-
-                pdf.multi_cell(70, altura_linha, "\n".join(linhas_nome), border=1)
-                pdf.set_xy(x_inicial + 70, y_inicial)
-                pdf.cell(20, altura_total, unidade, border=1, align='C')
-                pdf.cell(25, altura_total, f"{serv.get('quantidade', 0):.2f}", border=1, align='C')
-                pdf.cell(30, altura_total, formatar_moeda(serv.get('valor_unit', 0)), border=1, align='R')
-                pdf.cell(35, altura_total, formatar_moeda(serv.get('valor_total', 0)), border=1, align='R')
-                pdf.set_xy(x_inicial, y_inicial + altura_total)
+                pdf.multi_cell(0, 5, f"- {nome}")
         else:
             pdf.set_font('Helvetica', 'I', 9)
             pdf.cell(0, 6, '  Nenhum serviço cadastrado nesta fase', ln=True)
@@ -234,7 +209,9 @@ def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -
     )
     
     # Retorna os bytes do PDF
-    pdf_bytes = pdf.output(dest="S").encode("latin-1")
+    pdf_bytes = pdf.output(dest="S")
+    if isinstance(pdf_bytes, str):
+        pdf_bytes = pdf_bytes.encode("latin-1")
     return pdf_bytes
 
 
