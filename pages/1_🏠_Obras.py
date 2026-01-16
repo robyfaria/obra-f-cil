@@ -3,13 +3,15 @@ Página de Obras - Listagem, CRUD e detalhes com abas
 """
 
 import streamlit as st
+from datetime import date
 from utils.auth import require_auth
 from utils.db import (
     get_obras, get_obra, create_obra, update_obra,
     get_clientes, get_orcamentos_por_obra, get_fases_por_orcamento,
-    get_alocacoes_obra, get_apontamentos, get_servicos_fase
+    get_alocacoes_obra, get_apontamentos, get_servicos_fase,
+    get_pessoas, create_apontamento, update_apontamento, delete_apontamento
 )
-from utils.auditoria import audit_insert, audit_update
+from utils.auditoria import audit_insert, audit_update, audit_delete
 
 # Requer autenticação
 profile = require_auth()
@@ -460,6 +462,81 @@ elif st.session_state['obra_view'] == 'detalhe':
         if not orc_aprovados:
             st.warning("⚠️ É necessário ter um orçamento APROVADO para registrar apontamentos.")
         else:
+            st.markdown("#### ➕ Novo Apontamento")
+            
+            pessoas = get_pessoas(ativo=True)
+            orc_options = {o['id']: f"v{o['versao']} - {o['status']}" for o in orc_aprovados}
+            
+            if not pessoas:
+                st.warning("⚠️ Cadastre profissionais antes de registrar apontamentos.")
+            else:
+                with st.form("form_novo_apontamento"):
+                    col1, col2 = st.columns(2)
+                    
+                    with col1:
+                        pessoa_id = st.selectbox(
+                            "👷 Profissional *",
+                            options=[p['id'] for p in pessoas],
+                            format_func=lambda x: next((p['nome'] for p in pessoas if p['id'] == x), '-')
+                        )
+                    
+                    with col2:
+                        orcamento_id = st.selectbox(
+                            "📋 Orçamento *",
+                            options=list(orc_options.keys()),
+                            format_func=lambda x: orc_options[x]
+                        )
+                    
+                    fases = get_fases_por_orcamento(orcamento_id)
+                    if fases:
+                        fase_id = st.selectbox(
+                            "📑 Fase *",
+                            options=[f['id'] for f in fases],
+                            format_func=lambda x: next((f['nome_fase'] for f in fases if f['id'] == x), '-')
+                        )
+                    else:
+                        st.warning("⚠️ Este orçamento não possui fases.")
+                        fase_id = None
+                    
+                    col1, col2, col3 = st.columns(3)
+                    
+                    with col1:
+                        data_apont = st.date_input("📅 Data")
+                    with col2:
+                        tipo_dia = st.selectbox("Tipo do Dia", options=['NORMAL', 'SABADO', 'DOMINGO', 'FERIADO'])
+                    with col3:
+                        valor_base = st.number_input("💵 Valor Base (R$)", min_value=0.0, step=10.0)
+                    
+                    desconto_valor = st.number_input("Desconto (R$)", min_value=0.0, step=10.0)
+                    observacao = st.text_input("📝 Observação")
+                    
+                    if st.form_submit_button("✅ Registrar Apontamento", type="primary"):
+                        if not fase_id:
+                            st.error("Selecione uma fase válida para registrar o apontamento.")
+                            st.stop()
+                        dados = {
+                            'obra_id': obra_id,
+                            'orcamento_id': orcamento_id,
+                            'obra_fase_id': fase_id,
+                            'pessoa_id': pessoa_id,
+                            'data': data_apont.isoformat(),
+                            'tipo_dia': tipo_dia,
+                            'valor_base': valor_base,
+                            'desconto_valor': desconto_valor,
+                            'observacao': observacao
+                        }
+                        
+                        success, msg, novo = create_apontamento(dados)
+                        if success:
+                            audit_insert('apontamentos', novo)
+                            st.success(msg)
+                            st.rerun()
+                        else:
+                            st.error(msg)
+            
+            st.markdown("---")
+            st.markdown("#### 📋 Apontamentos Registrados")
+            
             apontamentos = get_apontamentos(obra_id=obra_id)
             
             if not apontamentos:
@@ -469,8 +546,85 @@ elif st.session_state['obra_view'] == 'detalhe':
                     pessoa_nome = apt.get('pessoas', {}).get('nome', '-') if apt.get('pessoas') else '-'
                     fase_nome = apt.get('obra_fases', {}).get('nome_fase', '-') if apt.get('obra_fases') else '-'
                     
-                    st.markdown(f"""
-                    📅 **{apt['data']}** | 👷 {pessoa_nome} | 📑 {fase_nome}  
-                    💵 Base: R$ {apt.get('valor_base', 0):,.2f} | Final: **R$ {apt.get('valor_final', 0):,.2f}**
-                    """)
-                    st.markdown("---")
+                    with st.expander(f"📅 {apt['data']} | 👷 {pessoa_nome} | 📑 {fase_nome}"):
+                        st.markdown(f"""
+                        💵 Base: R$ {apt.get('valor_base', 0):,.2f}  
+                        💰 Bruto: R$ {apt.get('valor_bruto', 0):,.2f} | Rateado: R$ {apt.get('valor_rateado', 0):,.2f}  
+                        ✅ Final: **R$ {apt.get('valor_final', 0):,.2f}**
+                        """)
+                        
+                        with st.form(f"form_edit_apont_{apt['id']}"):
+                            col1, col2, col3 = st.columns(3)
+                            
+                            with col1:
+                                data_edit = st.date_input(
+                                    "Data",
+                                    value=date.fromisoformat(apt['data']) if isinstance(apt.get('data'), str) else apt.get('data'),
+                                    key=f"data_{apt['id']}"
+                                )
+                            with col2:
+                                tipo_edit = st.selectbox(
+                                    "Tipo do Dia",
+                                    options=['NORMAL', 'SABADO', 'DOMINGO', 'FERIADO'],
+                                    index=['NORMAL', 'SABADO', 'DOMINGO', 'FERIADO'].index(apt.get('tipo_dia', 'NORMAL')),
+                                    key=f"tipo_{apt['id']}"
+                                )
+                            with col3:
+                                valor_base_edit = st.number_input(
+                                    "Valor Base (R$)",
+                                    min_value=0.0,
+                                    value=float(apt.get('valor_base', 0) or 0),
+                                    step=10.0,
+                                    key=f"valor_{apt['id']}"
+                                )
+                            
+                            desconto_edit = st.number_input(
+                                "Desconto (R$)",
+                                min_value=0.0,
+                                value=float(apt.get('desconto_valor', 0) or 0),
+                                step=10.0,
+                                key=f"desc_{apt['id']}"
+                            )
+                            
+                            observacao_edit = st.text_input(
+                                "Observação",
+                                value=apt.get('observacao', '') or '',
+                                key=f"obs_{apt['id']}"
+                            )
+                            
+                            col1, col2 = st.columns(2)
+                            with col1:
+                                if st.form_submit_button("💾 Atualizar"):
+                                    antes = {
+                                        'data': apt['data'],
+                                        'tipo_dia': apt.get('tipo_dia'),
+                                        'valor_base': apt.get('valor_base'),
+                                        'desconto_valor': apt.get('desconto_valor'),
+                                        'observacao': apt.get('observacao')
+                                    }
+                                    
+                                    novos_dados = {
+                                        'data': data_edit.isoformat(),
+                                        'tipo_dia': tipo_edit,
+                                        'valor_base': valor_base_edit,
+                                        'desconto_valor': desconto_edit,
+                                        'observacao': observacao_edit
+                                    }
+                                    
+                                    success, msg = update_apontamento(apt['id'], novos_dados)
+                                    if success:
+                                        audit_update('apontamentos', apt['id'], antes, novos_dados)
+                                        st.success(msg)
+                                        st.rerun()
+                                    else:
+                                        st.error(msg)
+                            
+                            with col2:
+                                if st.form_submit_button("🗑️ Remover"):
+                                    success, msg = delete_apontamento(apt['id'])
+                                    if success:
+                                        audit_delete('apontamentos', apt)
+                                        st.success(msg)
+                                        st.rerun()
+                                    else:
+                                        st.error(msg)

@@ -23,6 +23,10 @@ if 'orc_obra_id' not in st.session_state:
     st.session_state['orc_obra_id'] = None
 if 'orc_id_selecionado' not in st.session_state:
     st.session_state['orc_id_selecionado'] = None
+if 'pdf_orcamento_bytes' not in st.session_state:
+    st.session_state['pdf_orcamento_bytes'] = None
+if 'pdf_orcamento_id' not in st.session_state:
+    st.session_state['pdf_orcamento_id'] = None
 
 # ============================================
 # SELEÇÃO DE OBRA E ORÇAMENTO
@@ -66,6 +70,9 @@ orc_selecionado = st.selectbox(
 )
 
 st.session_state['orc_id_selecionado'] = orc_selecionado
+if st.session_state['pdf_orcamento_id'] != orc_selecionado:
+    st.session_state['pdf_orcamento_bytes'] = None
+    st.session_state['pdf_orcamento_id'] = orc_selecionado
 
 # Carrega dados do orçamento
 orcamento = get_orcamento(orc_selecionado)
@@ -252,6 +259,8 @@ if st.button("📄 Gerar PDF do Orçamento", type="primary"):
         
         # Gera o PDF
         pdf_bytes = gerar_pdf_orcamento(orcamento, fases, servicos_por_fase)
+        st.session_state['pdf_orcamento_bytes'] = pdf_bytes
+        st.session_state['pdf_orcamento_id'] = orc_selecionado
         
         # Oferece download
         obra_titulo = orcamento.get('obras', {}).get('titulo', 'obra')
@@ -263,5 +272,14 @@ if st.button("📄 Gerar PDF do Orçamento", type="primary"):
             mime="application/pdf"
         )
         
-        # Tenta salvar no Storage (opcional)
-        st.info("💡 Para salvar no servidor, configure o bucket 'orcamentos' no Supabase Storage.")
+        st.info("💡 Use o botão abaixo para salvar o PDF no Supabase Storage.")
+
+if st.session_state['pdf_orcamento_bytes']:
+    if st.button("☁️ Salvar PDF no servidor"):
+        obra_titulo = orcamento.get('obras', {}).get('titulo', 'obra')
+        url = salvar_pdf_storage(st.session_state['pdf_orcamento_bytes'], orc_selecionado, obra_titulo)
+        if url:
+            st.success("PDF salvo no servidor!")
+            st.markdown(f"[🔗 Abrir PDF]({url})")
+        else:
+            st.error("Não foi possível salvar o PDF no servidor.")

@@ -6,10 +6,10 @@ import streamlit as st
 from datetime import date, timedelta
 from utils.auth import require_auth
 from utils.db import (
-    get_alocacoes_dia, create_alocacao, delete_alocacao,
+    get_alocacoes_dia, create_alocacao, delete_alocacao, update_alocacao_confirmada,
     get_pessoas, get_obras, get_orcamentos_por_obra, get_fases_por_orcamento
 )
-from utils.auditoria import audit_insert, audit_delete
+from utils.auditoria import audit_insert, audit_delete, audit_update
 
 # Requer autenticação
 profile = require_auth()
@@ -61,12 +61,16 @@ else:
     for aloc in alocacoes:
         pessoa_nome = aloc.get('pessoas', {}).get('nome', '-') if aloc.get('pessoas') else '-'
         obra_titulo = aloc.get('obras', {}).get('titulo', '-') if aloc.get('obras') else '-'
+        fase_nome = aloc.get('obra_fases', {}).get('nome_fase', '-') if aloc.get('obra_fases') else '-'
+        orcamento_info = aloc.get('orcamentos', {})
+        orcamento_label = f"v{orcamento_info.get('versao')} - {orcamento_info.get('status')}" if orcamento_info else '--'
         
         periodo_emoji = '☀️' if aloc.get('periodo') == 'INTEGRAL' else '🌤️'
         tipo_emoji = '🏠' if aloc.get('tipo') == 'INTERNO' else '🚗'
+        confirmada = aloc.get('confirmada', False)
         
         with st.container():
-            col1, col2, col3 = st.columns([3, 2, 1])
+            col1, col2, col3, col4 = st.columns([3, 2, 2, 1])
             
             with col1:
                 st.markdown(f"""
@@ -81,7 +85,29 @@ else:
                 """)
             
             with col3:
-                if st.button("🗑️ Remover", key=f"del_aloc_{aloc['id']}"):
+                st.markdown(f"""
+                📋 {orcamento_label}  
+                📑 {fase_nome}
+                """)
+            
+            with col4:
+                if confirmada:
+                    st.markdown("✅ Confirmada")
+                else:
+                    if st.button("✅ Confirmar", key=f"confirm_{aloc['id']}"):
+                        if not aloc.get('orcamento_id') or not aloc.get('obra_fase_id'):
+                            st.error("Selecione orçamento e fase para confirmar.")
+                        else:
+                            antes = {'confirmada': False}
+                            success, msg = update_alocacao_confirmada(aloc['id'], True)
+                            if success:
+                                audit_update('alocacoes', aloc['id'], antes, {'confirmada': True})
+                                st.success(msg)
+                                st.rerun()
+                            else:
+                                st.error(msg)
+
+                if st.button("🗑️", key=f"del_aloc_{aloc['id']}"):
                     success, msg = delete_alocacao(aloc['id'])
                     if success:
                         audit_delete('alocacoes', aloc)

@@ -603,7 +603,7 @@ def get_alocacoes_dia(data: date) -> list:
         supabase = get_supabase_client()
         
         response = supabase.table('alocacoes') \
-            .select('*, pessoas(nome), obras(titulo)') \
+            .select('*, pessoas(nome), obras(titulo), orcamentos(versao, status), obra_fases(nome_fase)') \
             .eq('data', data.isoformat()) \
             .order('pessoa_id') \
             .execute()
@@ -621,7 +621,7 @@ def get_alocacoes_obra(obra_id: int) -> list:
         supabase = get_supabase_client()
         
         response = supabase.table('alocacoes') \
-            .select('*, pessoas(nome)') \
+            .select('*, pessoas(nome), orcamentos(versao, status), obra_fases(nome_fase)') \
             .eq('obra_id', obra_id) \
             .order('data', desc=True) \
             .execute()
@@ -644,6 +644,27 @@ def create_alocacao(dados: dict) -> tuple[bool, str, dict]:
         
     except Exception as e:
         return False, f"Erro ao criar alocação: {e}", {}
+
+
+def update_alocacao(alocacao_id: int, dados: dict) -> tuple[bool, str]:
+    """Atualiza uma alocação"""
+    try:
+        supabase = get_supabase_client()
+        
+        supabase.table('alocacoes') \
+            .update(dados) \
+            .eq('id', alocacao_id) \
+            .execute()
+        
+        return True, "Alocação atualizada!"
+        
+    except Exception as e:
+        return False, f"Erro ao atualizar alocação: {e}"
+
+
+def update_alocacao_confirmada(alocacao_id: int, confirmada: bool = True) -> tuple[bool, str]:
+    """Confirma ou desfaz confirmação de uma alocação"""
+    return update_alocacao(alocacao_id, {'confirmada': confirmada})
 
 
 def delete_alocacao(alocacao_id: int) -> tuple[bool, str]:
@@ -707,6 +728,54 @@ def create_apontamento(dados: dict) -> tuple[bool, str, dict]:
         return False, f"Erro ao registrar: {e}", {}
 
 
+def get_apontamento(apontamento_id: int) -> dict | None:
+    """Busca um apontamento específico"""
+    try:
+        supabase = get_supabase_client()
+        response = supabase.table('apontamentos') \
+            .select('*') \
+            .eq('id', apontamento_id) \
+            .single() \
+            .execute()
+        return response.data
+    except:
+        return None
+
+
+def update_apontamento(apontamento_id: int, dados: dict) -> tuple[bool, str]:
+    """Atualiza um apontamento"""
+    try:
+        supabase = get_supabase_client()
+        
+        supabase.table('apontamentos') \
+            .update(dados) \
+            .eq('id', apontamento_id) \
+            .execute()
+        
+        return True, "Apontamento atualizado!"
+        
+    except Exception as e:
+        if 'aprovado' in str(e).lower():
+            return False, "O orçamento precisa estar APROVADO."
+        return False, f"Erro ao atualizar: {e}"
+
+
+def delete_apontamento(apontamento_id: int) -> tuple[bool, str]:
+    """Remove um apontamento"""
+    try:
+        supabase = get_supabase_client()
+        
+        supabase.table('apontamentos') \
+            .delete() \
+            .eq('id', apontamento_id) \
+            .execute()
+        
+        return True, "Apontamento removido!"
+        
+    except Exception as e:
+        return False, f"Erro ao remover: {e}"
+
+
 # ============================================
 # FINANCEIRO (ADMIN ONLY)
 # ============================================
@@ -743,6 +812,26 @@ def create_recebimento(dados: dict) -> tuple[bool, str, dict]:
         return False, f"Erro ao criar: {e}", {}
 
 
+def update_recebimento_status(recebimento_id: int, novo_status: str, recebido_em: Optional[date] = None) -> tuple[bool, str]:
+    """Atualiza o status de um recebimento"""
+    try:
+        supabase = get_supabase_client()
+        
+        dados = {'status': novo_status}
+        if recebido_em:
+            dados['recebido_em'] = recebido_em.isoformat()
+        
+        supabase.table('recebimentos') \
+            .update(dados) \
+            .eq('id', recebimento_id) \
+            .execute()
+        
+        return True, "Recebimento atualizado!"
+        
+    except Exception as e:
+        return False, f"Erro ao atualizar: {e}"
+
+
 def get_pagamentos(status: Optional[str] = None) -> list:
     """Lista pagamentos"""
     try:
@@ -759,6 +848,91 @@ def get_pagamentos(status: Optional[str] = None) -> list:
     except Exception as e:
         print(f"Erro ao buscar pagamentos: {e}")
         return []
+
+
+def get_pagamento_itens(pagamento_id: int) -> list:
+    """Lista itens de um pagamento"""
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table('pagamento_itens') \
+            .select('*, apontamentos(*, pessoas(nome), obras(titulo), obra_fases(nome_fase))') \
+            .eq('pagamento_id', pagamento_id) \
+            .order('criado_em') \
+            .execute()
+        
+        return response.data or []
+        
+    except Exception as e:
+        print(f"Erro ao buscar itens de pagamento: {e}")
+        return []
+
+
+def create_pagamento(dados: dict) -> tuple[bool, str, dict]:
+    """Cria um novo pagamento"""
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table('pagamentos').insert(dados).execute()
+        
+        return True, "Pagamento criado!", response.data[0]
+        
+    except Exception as e:
+        return False, f"Erro ao criar pagamento: {e}", {}
+
+
+def update_pagamento_status(pagamento_id: int, novo_status: str, pago_em: Optional[date] = None) -> tuple[bool, str]:
+    """Atualiza o status de um pagamento"""
+    try:
+        supabase = get_supabase_client()
+        
+        dados = {'status': novo_status}
+        if novo_status == 'PAGO' and pago_em:
+            dados['pago_em'] = pago_em.isoformat()
+        
+        supabase.table('pagamentos') \
+            .update(dados) \
+            .eq('id', pagamento_id) \
+            .execute()
+        
+        return True, "Pagamento atualizado!"
+        
+    except Exception as e:
+        return False, f"Erro ao atualizar pagamento: {e}"
+
+
+def create_pagamento_item(pagamento_id: int, apontamento_id: int, valor: float, observacao: str = "") -> tuple[bool, str, dict]:
+    """Adiciona um item a um pagamento"""
+    try:
+        supabase = get_supabase_client()
+        
+        response = supabase.table('pagamento_itens').insert({
+            'pagamento_id': pagamento_id,
+            'apontamento_id': apontamento_id,
+            'valor': valor,
+            'observacao': observacao
+        }).execute()
+        
+        return True, "Item adicionado!", response.data[0]
+        
+    except Exception as e:
+        return False, f"Erro ao adicionar item: {e}", {}
+
+
+def delete_pagamento_item(item_id: int) -> tuple[bool, str]:
+    """Remove um item de pagamento"""
+    try:
+        supabase = get_supabase_client()
+        
+        supabase.table('pagamento_itens') \
+            .delete() \
+            .eq('id', item_id) \
+            .execute()
+        
+        return True, "Item removido!"
+        
+    except Exception as e:
+        return False, f"Erro ao remover item: {e}"
 
 
 # ============================================

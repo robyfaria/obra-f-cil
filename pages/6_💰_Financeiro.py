@@ -6,11 +6,13 @@ import streamlit as st
 from datetime import date
 from utils.auth import require_admin
 from utils.db import (
-    get_recebimentos, create_recebimento,
-    get_pagamentos, get_fases_por_orcamento,
-    get_obras, get_orcamentos_por_obra
+    get_recebimentos, create_recebimento, update_recebimento_status,
+    get_pagamentos, get_pagamento_itens, create_pagamento, update_pagamento_status,
+    create_pagamento_item, delete_pagamento_item,
+    get_fases_por_orcamento, get_obras, get_orcamentos_por_obra,
+    get_apontamentos
 )
-from utils.auditoria import audit_insert
+from utils.auditoria import audit_insert, audit_update, audit_delete
 
 # Requer ADMIN
 profile = require_admin()
@@ -51,7 +53,7 @@ with tab1:
             }.get(rec.get('status', ''), '⚪')
             
             with st.container():
-                col1, col2, col3 = st.columns([3, 2, 1])
+                col1, col2, col3, col4 = st.columns([3, 2, 1, 2])
                 
                 with col1:
                     st.markdown(f"""
@@ -67,6 +69,28 @@ with tab1:
                 
                 with col3:
                     st.markdown(f"{status_emoji} **{rec.get('status', '-')}**")
+
+                with col4:
+                    if rec.get('status') in ['ABERTO', 'VENCIDO']:
+                        if st.button("✅ Pagar", key=f"pagar_rec_{rec['id']}"):
+                            antes = {'status': rec.get('status')}
+                            success, msg = update_recebimento_status(rec['id'], 'PAGO', recebido_em=date.today())
+                            if success:
+                                audit_update('recebimentos', rec['id'], antes, {'status': 'PAGO'})
+                                st.success(msg)
+                                st.rerun()
+                            else:
+                                st.error(msg)
+                        
+                        if st.button("🚫 Cancelar", key=f"cancel_rec_{rec['id']}"):
+                            antes = {'status': rec.get('status')}
+                            success, msg = update_recebimento_status(rec['id'], 'CANCELADO')
+                            if success:
+                                audit_update('recebimentos', rec['id'], antes, {'status': 'CANCELADO'})
+                                st.success(msg)
+                                st.rerun()
+                            else:
+                                st.error(msg)
                 
                 st.markdown("---")
     
@@ -179,6 +203,185 @@ with tab2:
                     st.markdown(f"{status_emoji} **{pag.get('status', '-')}**")
                 
                 st.markdown("---")
+                
+                with st.expander("Detalhes e Itens"):
+                    itens = get_pagamento_itens(pag['id'])
+                    
+                    if itens:
+                        for item in itens:
+                            apt = item.get('apontamentos', {})
+                            pessoa_nome = apt.get('pessoas', {}).get('nome', '-') if apt.get('pessoas') else '-'
+                            obra_titulo = apt.get('obras', {}).get('titulo', '-') if apt.get('obras') else '-'
+                            fase_nome = apt.get('obra_fases', {}).get('nome_fase', '-') if apt.get('obra_fases') else '-'
+                            
+                            st.markdown(f"""
+                            **{pessoa_nome}** | {obra_titulo} | {fase_nome}  
+                            📅 {apt.get('data', '-')} | 💵 R$ {item.get('valor', 0):,.2f}
+                            """)
+                            
+                            if st.button("🗑️ Remover Item", key=f"del_item_{item['id']}"):
+                                success, msg = delete_pagamento_item(item['id'])
+                                if success:
+                                    audit_delete('pagamento_itens', item)
+                                    st.success(msg)
+                                    st.rerun()
+                                else:
+                                    st.error(msg)
+                            
+                            st.markdown("---")
+                    else:
+                        st.info("Nenhum item cadastrado.")
+                    
+                    if pag.get('status') == 'PENDENTE':
+                        st.markdown("**➕ Adicionar Item**")
+                        
+                        obras = get_obras(ativo=True)
+                        obra_options = {o['id']: o['titulo'] for o in obras}
+                        
+                        if not obra_options:
+                            st.warning("Nenhuma obra ativa encontrada para filtrar apontamentos.")
+                            obra_sel = None
+                        else:
+                            obra_sel = st.selectbox(
+                                "Obra",
+                                options=list(obra_options.keys()),
+                                format_func=lambda x: obra_options[x],
+                                key=f"pag_obra_{pag['id']}"
+                            )
+                        
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            data_inicio = st.date_input("De", key=f"pag_ini_{pag['id']}")
+                        with col2:
+                            data_fim = st.date_input("Até", key=f"pag_fim_{pag['id']}")
+                        
+                        apontamentos = get_apontamentos(
+                            obra_id=obra_sel,
+                            data_inicio=data_inicio,
+                            data_fim=data_fim
+                        ) if obra_sel else []
+                        
+                        apt_options = {
+                            a['id']: f"{a.get('data')} | {a.get('pessoas', {}).get('nome', '-') if a.get('pessoas') else '-'} | {a.get('obra_fases', {}).get('nome_fase', '-') if a.get('obra_fases') else '-'} | R$ {a.get('valor_final', 0):,.2f}"
+                            for a in apontamentos
+                        }
+                        
+                        if apt_options:
+                            apontamento_id = st.selectbox(
+                                "Apontamento",
+                                options=list(apt_options.keys()),
+                                format_func=lambda x: apt_options[x],
+                                key=f"pag_apont_{pag['id']}"
+                            )
+                            
+                            valor_item = st.number_input(
+                                "Valor do Item (R$)",
+                                min_value=0.0,
+                                value=float(next((a.get('valor_final', 0) for a in apontamentos if a['id'] == apontamento_id), 0)),
+                                step=10.0,
+                                key=f"pag_valor_{pag['id']}"
+                            )
+                            
+                            observacao = st.text_input("Observação", key=f"pag_obs_{pag['id']}")
+                            
+                            if st.button("✅ Adicionar Item", key=f"btn_add_item_{pag['id']}"):
+                                success, msg, novo = create_pagamento_item(pag['id'], apontamento_id, valor_item, observacao)
+                                if success:
+                                    audit_insert('pagamento_itens', novo)
+                                    st.success(msg)
+                                    st.rerun()
+                                else:
+                                    st.error(msg)
+                        else:
+                            st.info("Nenhum apontamento encontrado para os filtros.")
+                    
+                    if pag.get('status') == 'PENDENTE':
+                        st.markdown("---")
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.button("✅ Marcar como Pago", key=f"pago_{pag['id']}"):
+                                antes = {'status': pag.get('status')}
+                                success, msg = update_pagamento_status(pag['id'], 'PAGO', pago_em=date.today())
+                                if success:
+                                    audit_update('pagamentos', pag['id'], antes, {'status': 'PAGO'})
+                                    st.success(msg)
+                                    st.rerun()
+                                else:
+                                    st.error(msg)
+                        with col2:
+                            if st.button("🚫 Cancelar", key=f"cancel_pag_{pag['id']}"):
+                                antes = {'status': pag.get('status')}
+                                success, msg = update_pagamento_status(pag['id'], 'CANCELADO')
+                                if success:
+                                    audit_update('pagamentos', pag['id'], antes, {'status': 'CANCELADO'})
+                                    st.success(msg)
+                                    st.rerun()
+                                else:
+                                    st.error(msg)
     
     st.markdown("### ➕ Novo Pagamento")
-    st.info("💡 A criação de pagamentos com itens detalhados será implementada em breve.")
+    
+    with st.form("form_novo_pagamento"):
+        tipo = st.selectbox("Tipo", options=['SEMANAL', 'EXTRA', 'POR_FASE'])
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            referencia_inicio = st.date_input("Referência Início", value=date.today())
+        with col2:
+            referencia_fim = st.date_input("Referência Fim", value=date.today())
+        
+        obra_fase_id = None
+        if tipo == 'POR_FASE':
+            obras = get_obras(ativo=True)
+            if obras:
+                obra_id = st.selectbox(
+                    "Obra",
+                    options=[o['id'] for o in obras],
+                    format_func=lambda x: next((o['titulo'] for o in obras if o['id'] == x), '-')
+                )
+                
+                orcamentos = [o for o in get_orcamentos_por_obra(obra_id) if o['status'] == 'APROVADO']
+                
+                if orcamentos:
+                    orc_id = st.selectbox(
+                        "Orçamento Aprovado",
+                        options=[o['id'] for o in orcamentos],
+                        format_func=lambda x: f"v{next((o['versao'] for o in orcamentos if o['id'] == x), '-')}"
+                    )
+                    
+                    fases = get_fases_por_orcamento(orc_id)
+                    if fases:
+                        obra_fase_id = st.selectbox(
+                            "Fase",
+                            options=[f['id'] for f in fases],
+                            format_func=lambda x: next((f['nome_fase'] for f in fases if f['id'] == x), '-')
+                        )
+                    else:
+                        st.warning("Orçamento sem fases cadastradas.")
+                else:
+                    st.warning("Obra sem orçamento aprovado.")
+            else:
+                st.warning("Nenhuma obra ativa encontrada.")
+        
+        observacao = st.text_input("Observação")
+        
+        if st.form_submit_button("✅ Criar Pagamento", type="primary"):
+            dados = {
+                'tipo': tipo,
+                'referencia_inicio': referencia_inicio.isoformat(),
+                'referencia_fim': referencia_fim.isoformat(),
+                'status': 'PENDENTE',
+                'observacao': observacao
+            }
+            
+            if obra_fase_id:
+                dados['obra_fase_id'] = obra_fase_id
+            
+            success, msg, novo = create_pagamento(dados)
+            
+            if success:
+                audit_insert('pagamentos', novo)
+                st.success(msg)
+                st.rerun()
+            else:
+                st.error(msg)

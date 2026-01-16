@@ -5,7 +5,7 @@ Módulo de auditoria - Registra ações no banco de dados
 import json
 import streamlit as st
 from datetime import datetime
-from utils.auth import get_supabase_client
+from utils.auth import get_supabase_client, is_admin
 
 
 def registrar_auditoria(
@@ -25,6 +25,8 @@ def registrar_auditoria(
         antes: Estado anterior do registro (para UPDATE/DELETE)
         depois: Novo estado do registro (para INSERT/UPDATE)
     """
+    if not is_admin():
+        return
     try:
         supabase = get_supabase_client()
         
