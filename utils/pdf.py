@@ -53,6 +53,29 @@ def normalizar_texto(valor: Optional[object], padrao: str = "-") -> str:
     return str(valor)
 
 
+def quebrar_texto_em_linhas(pdf: FPDF, texto: str, largura_max: float) -> list[str]:
+    """Divide um texto em linhas que caibam na largura informada."""
+    palavras = texto.split()
+    if not palavras:
+        return [""]
+
+    linhas = []
+    linha_atual = ""
+    for palavra in palavras:
+        teste = f"{linha_atual} {palavra}".strip()
+        if pdf.get_string_width(teste) <= largura_max:
+            linha_atual = teste
+        else:
+            if linha_atual:
+                linhas.append(linha_atual)
+            linha_atual = palavra
+
+    if linha_atual:
+        linhas.append(linha_atual)
+
+    return linhas
+
+
 def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -> bytes:
     """
     Gera o PDF de um orçamento
@@ -148,17 +171,20 @@ def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -
                 servico_info = serv.get('servicos', {})
                 nome = normalizar_texto(servico_info.get('nome'))
                 unidade = normalizar_texto(servico_info.get('unidade'))
-                
-                # Trunca nome se muito longo
-                if len(nome) > 35:
-                    nome = nome[:32] + '...'
-                
-                pdf.cell(70, 6, nome, border=1)
-                pdf.cell(20, 6, unidade, border=1, align='C')
-                pdf.cell(25, 6, f"{serv.get('quantidade', 0):.2f}", border=1, align='C')
-                pdf.cell(30, 6, formatar_moeda(serv.get('valor_unit', 0)), border=1, align='R')
-                pdf.cell(35, 6, formatar_moeda(serv.get('valor_total', 0)), border=1, align='R')
-                pdf.ln()
+
+                linhas_nome = quebrar_texto_em_linhas(pdf, nome, 70)
+                altura_linha = 5
+                altura_total = altura_linha * max(1, len(linhas_nome))
+                x_inicial = pdf.get_x()
+                y_inicial = pdf.get_y()
+
+                pdf.multi_cell(70, altura_linha, "\n".join(linhas_nome), border=1)
+                pdf.set_xy(x_inicial + 70, y_inicial)
+                pdf.cell(20, altura_total, unidade, border=1, align='C')
+                pdf.cell(25, altura_total, f"{serv.get('quantidade', 0):.2f}", border=1, align='C')
+                pdf.cell(30, altura_total, formatar_moeda(serv.get('valor_unit', 0)), border=1, align='R')
+                pdf.cell(35, altura_total, formatar_moeda(serv.get('valor_total', 0)), border=1, align='R')
+                pdf.set_xy(x_inicial, y_inicial + altura_total)
         else:
             pdf.set_font('Helvetica', 'I', 9)
             pdf.cell(0, 6, '  Nenhum serviço cadastrado nesta fase', ln=True)
@@ -208,8 +234,8 @@ def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -
     )
     
     # Retorna os bytes do PDF
-    pdf_bytes = pdf.output(dest="S")
-    return bytes(pdf_bytes)
+    pdf_bytes = pdf.output(dest="S").encode("latin-1")
+    return pdf_bytes
 
 
 def salvar_pdf_storage(pdf_bytes: bytes, orcamento_id: int, obra_titulo: str) -> Optional[str]:
