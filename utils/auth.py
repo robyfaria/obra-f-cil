@@ -4,6 +4,7 @@ Módulo de autenticação com Supabase
 
 import os
 import streamlit as st
+from yarl import URL
 from supabase import create_client, Client
 from dotenv import load_dotenv
 
@@ -26,6 +27,8 @@ def init_supabase():
     # Tenta carregar das variáveis de ambiente ou secrets do Streamlit
     url = os.getenv('SUPABASE_URL') or st.secrets.get('SUPABASE_URL')
     key = os.getenv('SUPABASE_ANON_KEY') or st.secrets.get('SUPABASE_ANON_KEY')
+    storage_url = os.getenv('SUPABASE_STORAGE_URL') or st.secrets.get('SUPABASE_STORAGE_URL')
+    storage_region = os.getenv('SUPABASE_STORAGE_REGION') or st.secrets.get('SUPABASE_STORAGE_REGION')
     
     if not url or not key:
         st.error("""
@@ -39,7 +42,16 @@ def init_supabase():
         """)
         st.stop()
     
-    st.session_state['supabase'] = create_client(url, key)
+    supabase = create_client(url, key)
+
+    if storage_url:
+        supabase.storage_url = URL(storage_url if storage_url.endswith("/") else f"{storage_url}/")
+
+    if storage_region:
+        supabase.options.headers["x-amz-bucket-region"] = storage_region
+        supabase.options.headers["x-amz-region"] = storage_region
+
+    st.session_state['supabase'] = supabase
 
 
 def login(email: str, password: str) -> tuple[bool, str]:

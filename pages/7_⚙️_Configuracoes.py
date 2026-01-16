@@ -7,9 +7,12 @@ from datetime import date, timedelta
 from utils.auth import require_admin
 from utils.db import get_usuarios_app, update_usuario_app, get_auditoria, get_servicos, create_servico
 from utils.auditoria import audit_update, audit_insert
+from utils.layout import render_sidebar, render_top_logo
 
 # Requer ADMIN
 profile = require_admin()
+render_sidebar(profile)
+render_top_logo()
 
 st.title("⚙️ Configurações")
 

@@ -2,18 +2,18 @@
 
 App de gestão de obras de pintura com interface amigável para usuários 60+.
 
-## Requisitos
+## Setup completo
+
+### Requisitos
 
 - Python 3.11+
-- Conta Supabase com o banco de dados já configurado
-
-## Configuração Local
+- Conta Supabase com Postgres, Auth e Storage habilitados
 
 ### 1. Clone o repositório
 
 ```bash
 git clone <seu-repositorio>
-cd streamlit-obras
+cd sepol
 ```
 
 ### 2. Crie um ambiente virtual
@@ -22,7 +22,7 @@ cd streamlit-obras
 python -m venv venv
 source venv/bin/activate  # Linux/Mac
 # ou
-venv\Scripts\activate  # Windows
+venv\\Scripts\\activate  # Windows
 ```
 
 ### 3. Instale as dependências
@@ -31,7 +31,16 @@ venv\Scripts\activate  # Windows
 pip install -r requirements.txt
 ```
 
-### 4. Configure as variáveis de ambiente
+### 4. Configure o banco (Supabase)
+
+1. Crie um projeto no Supabase.
+2. No SQL Editor, execute os scripts da pasta `sql/` na ordem:
+   - `sql/001_core.sql`
+   - `sql/002_add_scripts.sql`
+   - `sql/003_add_scripts.sql`
+3. Verifique que o bucket `orcamentos` existe (ou crie no Storage).
+
+### 5. Configure as variáveis de ambiente
 
 Crie um arquivo `.env` na raiz do projeto:
 
@@ -40,45 +49,58 @@ SUPABASE_URL=https://seu-projeto.supabase.co
 SUPABASE_ANON_KEY=sua-anon-key-aqui
 ```
 
-**IMPORTANTE:** Nunca use a `service_role` key no frontend!
+**IMPORTANTE:** Nunca use a `service_role` key no frontend.
 
-### 5. Execute o app
+### 6. Execute o app
 
 ```bash
 streamlit run app.py
 ```
 
-O app abrirá em `http://localhost:8501`
+O app abrirá em `http://localhost:8501`.
 
-## Deploy no Streamlit Community Cloud
+## Variáveis de ambiente
 
-### 1. Suba o código para o GitHub
+| Variável | Descrição | Obrigatória |
+| --- | --- | --- |
+| `SUPABASE_URL` | URL do projeto Supabase | Sim |
+| `SUPABASE_ANON_KEY` | Chave pública (anon) do Supabase | Sim |
 
-```bash
-git add .
-git commit -m "Initial commit"
-git push origin main
+Para deploy no Streamlit Cloud, adicione as mesmas chaves em **Settings > Secrets**.
+
+## Arquitetura
+
+- **UI**: Streamlit multipage (`app.py` + `pages/`).
+- **Autenticação**: Supabase Auth com verificação de perfil em `public.usuarios_app`.
+- **Dados**: Camada de acesso em `utils/db.py` consumindo PostgREST do Supabase.
+- **Auditoria**: Triggers em Postgres gravando histórico em tabela de auditoria.
+- **PDF**: Geração local via `fpdf2` e upload para Supabase Storage (`bucket orcamentos`).
+
+## Fluxo de dados
+
+1. **Login** → App chama Supabase Auth e grava sessão local.
+2. **Carregamento de telas** → `utils/db.py` consulta tabelas e views.
+3. **Escrita** → App envia inserts/updates → triggers recalculam totais e registram auditoria.
+4. **Orçamentos (PDF)** → `utils/pdf.py` gera o arquivo → upload no Storage → URL pública salva no orçamento.
+
+## Decisões técnicas
+
+- **Streamlit** pela rapidez de entrega e acessibilidade para usuários 60+.
+- **Supabase** para unificar Auth, DB e Storage.
+- **Triggers SQL** para garantir consistência de totais e auditoria no banco.
+- **fpdf2** para geração de PDFs simples sem dependências de browser.
+
+## Diagrama (simplificado)
+
+```mermaid
+flowchart LR
+    UI[Streamlit UI] -->|Auth| Auth[Supabase Auth]
+    UI -->|CRUD| DB[(Postgres)]
+    DB -->|Triggers de cálculo/auditoria| TRG[Triggers]
+    UI -->|Gera PDF| PDF[fpdf2]
+    PDF -->|Upload| STO[Supabase Storage]
+    STO -->|URL pública| DB
 ```
-
-### 2. Acesse [share.streamlit.io](https://share.streamlit.io)
-
-1. Faça login com sua conta GitHub
-2. Clique em "New app"
-3. Selecione o repositório e branch
-4. Defina o arquivo principal: `app.py`
-
-### 3. Configure os Secrets
-
-No painel do Streamlit Cloud, vá em **Settings > Secrets** e adicione:
-
-```toml
-SUPABASE_URL = "https://seu-projeto.supabase.co"
-SUPABASE_ANON_KEY = "sua-anon-key-aqui"
-```
-
-### 4. Deploy!
-
-Clique em "Deploy" e aguarde. Seu app estará disponível em uma URL pública.
 
 ## Estrutura do Projeto
 
@@ -98,12 +120,16 @@ repo(sepol)/
 │   ├── auth.py            # Autenticação Supabase
 │   ├── db.py              # Consultas ao banco
 │   ├── auditoria.py       # Logs de auditoria
+│   ├── layout.py          # Componentes compartilhados
 │   └── pdf.py             # Geração de PDF
 ├── sql/
-│   └── schema_reference.sql
+│   ├── 001_core.sql
+│   ├── 002_add_scripts.sql
+│   └── 003_add_scripts.sql
+├── assets/
+│   └── logo.png
 ├── requirements.txt
 ├── README.md
-├── .gitignore
 └── .env.example
 ```
 

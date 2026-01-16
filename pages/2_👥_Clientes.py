@@ -6,9 +6,12 @@ import streamlit as st
 from utils.auth import require_auth
 from utils.db import get_clientes, get_cliente, create_cliente, update_cliente, toggle_cliente_ativo
 from utils.auditoria import audit_insert, audit_update
+from utils.layout import render_sidebar, render_top_logo
 
 # Requer autenticação
 profile = require_auth()
+render_sidebar(profile)
+render_top_logo()
 
 st.title("👥 Clientes")
 

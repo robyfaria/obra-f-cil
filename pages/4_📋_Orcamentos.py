@@ -8,13 +8,17 @@ from utils.db import (
     get_obras, get_orcamentos_por_obra, get_orcamento,
     get_fases_por_orcamento, get_servicos_fase, get_servicos,
     add_servico_fase, update_servico_fase, delete_servico_fase,
+    create_servico,
     update_orcamento_desconto, update_fase
 )
 from utils.auditoria import audit_insert, audit_update, audit_delete
 from utils.pdf import gerar_pdf_orcamento, salvar_pdf_storage
+from utils.layout import render_sidebar, render_top_logo
 
 # Requer autenticação
 profile = require_auth()
+render_sidebar(profile)
+render_top_logo()
 
 st.title("📋 Orçamentos")
 
@@ -23,6 +27,10 @@ if 'orc_obra_id' not in st.session_state:
     st.session_state['orc_obra_id'] = None
 if 'orc_id_selecionado' not in st.session_state:
     st.session_state['orc_id_selecionado'] = None
+if 'pdf_orcamento_bytes' not in st.session_state:
+    st.session_state['pdf_orcamento_bytes'] = None
+if 'pdf_orcamento_id' not in st.session_state:
+    st.session_state['pdf_orcamento_id'] = None
 
 # ============================================
 # SELEÇÃO DE OBRA E ORÇAMENTO
@@ -66,6 +74,9 @@ orc_selecionado = st.selectbox(
 )
 
 st.session_state['orc_id_selecionado'] = orc_selecionado
+if st.session_state['pdf_orcamento_id'] != orc_selecionado:
+    st.session_state['pdf_orcamento_bytes'] = None
+    st.session_state['pdf_orcamento_id'] = orc_selecionado
 
 # Carrega dados do orçamento
 orcamento = get_orcamento(orc_selecionado)
@@ -162,6 +173,32 @@ for fase in fases:
         # Adicionar novo serviço (só se editável)
         if orcamento['status'] in ['RASCUNHO', 'EMITIDO']:
             st.markdown("**➕ Adicionar Serviço:**")
+
+            with st.expander("🆕 Cadastro rápido de serviço"):
+                with st.form(f"form_novo_servico_{fase['id']}"):
+                    nome_servico = st.text_input(
+                        "Nome do Serviço *",
+                        placeholder="Ex: Pintura de parede",
+                        key=f"novo_serv_nome_{fase['id']}"
+                    )
+                    unidade_servico = st.selectbox(
+                        "Unidade",
+                        options=['UN', 'M2', 'ML', 'H', 'DIA'],
+                        key=f"novo_serv_un_{fase['id']}"
+                    )
+
+                    if st.form_submit_button("✅ Criar Serviço", type="primary"):
+                        if not nome_servico.strip():
+                            st.error("⚠️ Informe o nome do serviço!")
+                        else:
+                            success, msg, novo = create_servico(nome_servico.strip(), unidade_servico)
+
+                            if success:
+                                audit_insert('servicos', novo)
+                                st.success(msg)
+                                st.rerun()
+                            else:
+                                st.error(msg)
             
             if servicos_catalogo:
                 with st.form(f"form_add_serv_{fase['id']}"):
@@ -252,6 +289,8 @@ if st.button("📄 Gerar PDF do Orçamento", type="primary"):
         
         # Gera o PDF
         pdf_bytes = gerar_pdf_orcamento(orcamento, fases, servicos_por_fase)
+        st.session_state['pdf_orcamento_bytes'] = pdf_bytes
+        st.session_state['pdf_orcamento_id'] = orc_selecionado
         
         # Oferece download
         obra_titulo = orcamento.get('obras', {}).get('titulo', 'obra')
@@ -263,5 +302,14 @@ if st.button("📄 Gerar PDF do Orçamento", type="primary"):
             mime="application/pdf"
         )
         
-        # Tenta salvar no Storage (opcional)
-        st.info("💡 Para salvar no servidor, configure o bucket 'orcamentos' no Supabase Storage.")
+        st.info("💡 Use o botão abaixo para salvar o PDF no Supabase Storage.")
+
+if st.session_state['pdf_orcamento_bytes']:
+    if st.button("☁️ Salvar PDF no servidor"):
+        obra_titulo = orcamento.get('obras', {}).get('titulo', 'obra')
+        url = salvar_pdf_storage(st.session_state['pdf_orcamento_bytes'], orc_selecionado, obra_titulo)
+        if url:
+            st.success("PDF salvo no servidor!")
+            st.markdown(f"[🔗 Abrir PDF]({url})")
+        else:
+            st.error("Não foi possível salvar o PDF no servidor.")

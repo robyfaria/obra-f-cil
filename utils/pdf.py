@@ -7,7 +7,10 @@ from fpdf import FPDF
 from datetime import datetime
 from io import BytesIO
 from typing import Optional
+from pathlib import Path
 from utils.auth import get_supabase_client
+
+LOGO_PATH = Path(__file__).resolve().parents[1] / "assets" / "logo.png"
 
 
 class OrcamentoPDF(FPDF):
@@ -16,9 +19,13 @@ class OrcamentoPDF(FPDF):
     def __init__(self):
         super().__init__()
         self.set_auto_page_break(auto=True, margin=15)
+        self.logo_path = LOGO_PATH if LOGO_PATH.exists() else None
         
     def header(self):
         """Cabeçalho do PDF"""
+        if self.logo_path:
+            self.image(str(self.logo_path), x=10, y=8, w=18)
+            self.set_y(10)
         self.set_font('Helvetica', 'B', 20)
         self.set_text_color(26, 82, 118)  # Azul escuro
         self.cell(0, 10, 'ORÇAMENTO DE PINTURA', ln=True, align='C')
@@ -37,6 +44,36 @@ def formatar_moeda(valor: float) -> str:
     if valor is None:
         return "R$ 0,00"
     return f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
+
+
+def normalizar_texto(valor: Optional[object], padrao: str = "-") -> str:
+    """Normaliza valores para texto no PDF."""
+    if valor is None:
+        return padrao
+    return str(valor)
+
+
+def quebrar_texto_em_linhas(pdf: FPDF, texto: str, largura_max: float) -> list[str]:
+    """Divide um texto em linhas que caibam na largura informada."""
+    palavras = texto.split()
+    if not palavras:
+        return [""]
+
+    linhas = []
+    linha_atual = ""
+    for palavra in palavras:
+        teste = f"{linha_atual} {palavra}".strip()
+        if pdf.get_string_width(teste) <= largura_max:
+            linha_atual = teste
+        else:
+            if linha_atual:
+                linhas.append(linha_atual)
+            linha_atual = palavra
+
+    if linha_atual:
+        linhas.append(linha_atual)
+
+    return linhas
 
 
 def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -> bytes:
@@ -68,13 +105,13 @@ def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -
     
     pdf.set_font('Helvetica', '', 11)
     pdf.cell(30, 7, 'Cliente:', ln=False)
-    pdf.cell(0, 7, cliente.get('nome', '-'), ln=True)
+    pdf.cell(0, 7, normalizar_texto(cliente.get('nome')), ln=True)
     
     pdf.cell(30, 7, 'Telefone:', ln=False)
-    pdf.cell(0, 7, cliente.get('telefone', '-'), ln=True)
+    pdf.cell(0, 7, normalizar_texto(cliente.get('telefone')), ln=True)
     
     pdf.cell(30, 7, 'Endereço:', ln=False)
-    pdf.cell(0, 7, cliente.get('endereco', '-'), ln=True)
+    pdf.cell(0, 7, normalizar_texto(cliente.get('endereco')), ln=True)
     
     pdf.ln(5)
     
@@ -84,10 +121,10 @@ def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -
     
     pdf.set_font('Helvetica', '', 11)
     pdf.cell(30, 7, 'Obra:', ln=False)
-    pdf.cell(0, 7, obra.get('titulo', '-'), ln=True)
+    pdf.cell(0, 7, normalizar_texto(obra.get('titulo')), ln=True)
     
     pdf.cell(30, 7, 'Local:', ln=False)
-    pdf.cell(0, 7, obra.get('endereco_obra', '-'), ln=True)
+    pdf.cell(0, 7, normalizar_texto(obra.get('endereco_obra')), ln=True)
     
     pdf.cell(30, 7, 'Versão:', ln=False)
     pdf.cell(0, 7, str(orcamento.get('versao', 1)), ln=True)
@@ -106,7 +143,13 @@ def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -
         # Nome da fase
         pdf.set_font('Helvetica', 'B', 11)
         pdf.set_fill_color(200, 220, 240)
-        pdf.cell(0, 8, f"{fase['ordem']}. {fase['nome_fase']}", ln=True, fill=True)
+        pdf.cell(
+            0,
+            8,
+            f"{fase['ordem']}. {normalizar_texto(fase['nome_fase'])}",
+            ln=True,
+            fill=True,
+        )
         
         # Serviços da fase
         servicos = servicos_por_fase.get(fase['id'], [])
@@ -126,19 +169,22 @@ def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -
             pdf.set_font('Helvetica', '', 9)
             for serv in servicos:
                 servico_info = serv.get('servicos', {})
-                nome = servico_info.get('nome', '-')
-                unidade = servico_info.get('unidade', '-')
-                
-                # Trunca nome se muito longo
-                if len(nome) > 35:
-                    nome = nome[:32] + '...'
-                
-                pdf.cell(70, 6, nome, border=1)
-                pdf.cell(20, 6, unidade, border=1, align='C')
-                pdf.cell(25, 6, f"{serv.get('quantidade', 0):.2f}", border=1, align='C')
-                pdf.cell(30, 6, formatar_moeda(serv.get('valor_unit', 0)), border=1, align='R')
-                pdf.cell(35, 6, formatar_moeda(serv.get('valor_total', 0)), border=1, align='R')
-                pdf.ln()
+                nome = normalizar_texto(servico_info.get('nome'))
+                unidade = normalizar_texto(servico_info.get('unidade'))
+
+                linhas_nome = quebrar_texto_em_linhas(pdf, nome, 70)
+                altura_linha = 5
+                altura_total = altura_linha * max(1, len(linhas_nome))
+                x_inicial = pdf.get_x()
+                y_inicial = pdf.get_y()
+
+                pdf.multi_cell(70, altura_linha, "\n".join(linhas_nome), border=1)
+                pdf.set_xy(x_inicial + 70, y_inicial)
+                pdf.cell(20, altura_total, unidade, border=1, align='C')
+                pdf.cell(25, altura_total, f"{serv.get('quantidade', 0):.2f}", border=1, align='C')
+                pdf.cell(30, altura_total, formatar_moeda(serv.get('valor_unit', 0)), border=1, align='R')
+                pdf.cell(35, altura_total, formatar_moeda(serv.get('valor_total', 0)), border=1, align='R')
+                pdf.set_xy(x_inicial, y_inicial + altura_total)
         else:
             pdf.set_font('Helvetica', 'I', 9)
             pdf.cell(0, 6, '  Nenhum serviço cadastrado nesta fase', ln=True)
@@ -188,7 +234,8 @@ def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -
     )
     
     # Retorna os bytes do PDF
-    return pdf.output()
+    pdf_bytes = pdf.output(dest="S").encode("latin-1")
+    return pdf_bytes
 
 
 def salvar_pdf_storage(pdf_bytes: bytes, orcamento_id: int, obra_titulo: str) -> Optional[str]:
