@@ -12,11 +12,12 @@ from utils.db import (
 )
 from utils.auditoria import audit_insert, audit_update, audit_delete
 from utils.pdf import gerar_pdf_orcamento, salvar_pdf_storage
-from utils.layout import render_sidebar
+from utils.layout import render_sidebar, render_top_logo
 
 # Requer autenticação
 profile = require_auth()
 render_sidebar(profile)
+render_top_logo()
 
 st.title("📋 Orçamentos")
 

@@ -17,10 +17,16 @@ def render_logo(width: int = 160) -> None:
         st.markdown("**Gestão de Obras**")
 
 
+def render_top_logo(width: int = 140) -> None:
+    """Renderiza o logo alinhado à direita no topo da tela."""
+    _, col_logo = st.columns([6, 1])
+    with col_logo:
+        render_logo(width=width)
+
+
 def render_sidebar(profile: dict) -> None:
     """Renderiza a sidebar padrão para usuários autenticados."""
     with st.sidebar:
-        render_logo(width=140)
         st.markdown(f"""
         <div style="padding: 20px; background: #f0f2f6; border-radius: 10px; margin: 10px 0 20px 0;">
             <h3 style="margin: 0;">👤 {profile['usuario']}</h3>

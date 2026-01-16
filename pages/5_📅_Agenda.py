@@ -10,11 +10,12 @@ from utils.db import (
     get_pessoas, get_obras, get_orcamentos_por_obra, get_fases_por_orcamento
 )
 from utils.auditoria import audit_insert, audit_delete, audit_update
-from utils.layout import render_sidebar
+from utils.layout import render_sidebar, render_top_logo
 
 # Requer autenticação
 profile = require_auth()
 render_sidebar(profile)
+render_top_logo()
 
 st.title("📅 Agenda de Alocações")
 
@@ -38,12 +39,13 @@ with col2:
     data_selecionada = st.date_input(
         "📆 Data",
         value=st.session_state['data_agenda'],
-        key="input_data_agenda"
+        key="data_agenda"
     )
-    st.session_state['data_agenda'] = data_selecionada
 
 with col3:
     if st.button("➡️ Próximo Dia"):
+        if 'data_agenda' not in st.session_state:
+            st.session_state['data_agenda'] = date.today()
         st.session_state['data_agenda'] = st.session_state['data_agenda'] + timedelta(days=1)
         st.rerun()
 

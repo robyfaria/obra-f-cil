@@ -5,7 +5,7 @@ Página de Obras - Listagem, CRUD e detalhes com abas
 import streamlit as st
 from datetime import date
 from utils.auth import require_auth
-from utils.layout import render_sidebar
+from utils.layout import render_sidebar, render_top_logo
 from utils.db import (
     get_obras, get_obra, create_obra, update_obra,
     get_clientes, get_orcamentos_por_obra, get_fases_por_orcamento,
@@ -17,6 +17,7 @@ from utils.auditoria import audit_insert, audit_update, audit_delete
 # Requer autenticação
 profile = require_auth()
 render_sidebar(profile)
+render_top_logo()
 
 st.title("🏠 Obras")
 
