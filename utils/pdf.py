@@ -46,6 +46,13 @@ def formatar_moeda(valor: float) -> str:
     return f"R$ {valor:,.2f}".replace(',', 'X').replace('.', ',').replace('X', '.')
 
 
+def normalizar_texto(valor: Optional[object], padrao: str = "-") -> str:
+    """Normaliza valores para texto no PDF."""
+    if valor is None:
+        return padrao
+    return str(valor)
+
+
 def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -> bytes:
     """
     Gera o PDF de um orçamento
@@ -75,13 +82,13 @@ def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -
     
     pdf.set_font('Helvetica', '', 11)
     pdf.cell(30, 7, 'Cliente:', ln=False)
-    pdf.cell(0, 7, cliente.get('nome', '-'), ln=True)
+    pdf.cell(0, 7, normalizar_texto(cliente.get('nome')), ln=True)
     
     pdf.cell(30, 7, 'Telefone:', ln=False)
-    pdf.cell(0, 7, cliente.get('telefone', '-'), ln=True)
+    pdf.cell(0, 7, normalizar_texto(cliente.get('telefone')), ln=True)
     
     pdf.cell(30, 7, 'Endereço:', ln=False)
-    pdf.cell(0, 7, cliente.get('endereco', '-'), ln=True)
+    pdf.cell(0, 7, normalizar_texto(cliente.get('endereco')), ln=True)
     
     pdf.ln(5)
     
@@ -91,10 +98,10 @@ def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -
     
     pdf.set_font('Helvetica', '', 11)
     pdf.cell(30, 7, 'Obra:', ln=False)
-    pdf.cell(0, 7, obra.get('titulo', '-'), ln=True)
+    pdf.cell(0, 7, normalizar_texto(obra.get('titulo')), ln=True)
     
     pdf.cell(30, 7, 'Local:', ln=False)
-    pdf.cell(0, 7, obra.get('endereco_obra', '-'), ln=True)
+    pdf.cell(0, 7, normalizar_texto(obra.get('endereco_obra')), ln=True)
     
     pdf.cell(30, 7, 'Versão:', ln=False)
     pdf.cell(0, 7, str(orcamento.get('versao', 1)), ln=True)
@@ -113,7 +120,13 @@ def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -
         # Nome da fase
         pdf.set_font('Helvetica', 'B', 11)
         pdf.set_fill_color(200, 220, 240)
-        pdf.cell(0, 8, f"{fase['ordem']}. {fase['nome_fase']}", ln=True, fill=True)
+        pdf.cell(
+            0,
+            8,
+            f"{fase['ordem']}. {normalizar_texto(fase['nome_fase'])}",
+            ln=True,
+            fill=True,
+        )
         
         # Serviços da fase
         servicos = servicos_por_fase.get(fase['id'], [])
@@ -133,8 +146,8 @@ def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -
             pdf.set_font('Helvetica', '', 9)
             for serv in servicos:
                 servico_info = serv.get('servicos', {})
-                nome = servico_info.get('nome', '-')
-                unidade = servico_info.get('unidade', '-')
+                nome = normalizar_texto(servico_info.get('nome'))
+                unidade = normalizar_texto(servico_info.get('unidade'))
                 
                 # Trunca nome se muito longo
                 if len(nome) > 35:
