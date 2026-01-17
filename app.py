@@ -5,7 +5,7 @@ Interface 60+ friendly com Supabase como backend
 
 import streamlit as st
 from utils.auth import init_supabase, login, logout, get_current_user, get_user_profile
-from utils.layout import render_logo, render_sidebar, render_top_logo
+from utils.layout import render_centered_logo, render_sidebar, render_top_logo
 
 # Configuração da página
 st.set_page_config(
@@ -92,9 +92,7 @@ def show_login_page():
     """Exibe a página de login"""
     st.markdown("---")
 
-    col_spacer, col_logo = st.columns([6, 1])
-    with col_logo:
-        render_logo(width=200)
+    render_centered_logo(width=150)
 
     col1, col2, col3 = st.columns([1, 2, 1])
     

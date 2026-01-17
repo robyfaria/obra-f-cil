@@ -892,6 +892,10 @@ create policy usuarios_app_admin_select
 on public.usuarios_app for select
 using (public.fn_is_admin());
 
+create policy usuarios_app_self_select
+on public.usuarios_app for select
+using (auth.uid() = auth_user_id);
+
 create policy usuarios_app_admin_write
 on public.usuarios_app for insert
 with check (public.fn_is_admin());

@@ -166,9 +166,20 @@ def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -
         
         # Subtotal da fase
         pdf.set_font('Helvetica', 'B', 10)
-        pdf.cell(145, 6, f"Subtotal - {fase['nome_fase']}:", align='R')
-        pdf.cell(35, 6, formatar_moeda(fase.get('valor_fase', 0)), align='R')
-        pdf.ln(8)
+        subtotal_label = f"Subtotal - {normalizar_texto(fase.get('nome_fase'))}:"
+        label_width = pdf.epw * 0.7
+        value_width = pdf.epw - label_width
+        line_height = 6
+        label_lines = quebrar_texto_em_linhas(pdf, subtotal_label, label_width)
+        start_x = pdf.l_margin
+        start_y = pdf.get_y()
+        for idx, line in enumerate(label_lines):
+            pdf.set_xy(start_x, start_y + idx * line_height)
+            pdf.cell(label_width, line_height, line, align='R')
+            if idx == len(label_lines) - 1:
+                pdf.set_xy(start_x + label_width, start_y + idx * line_height)
+                pdf.cell(value_width, line_height, formatar_moeda(fase.get('valor_fase', 0)), align='R')
+        pdf.set_y(start_y + len(label_lines) * line_height + 2)
     
     # Totais
     pdf.ln(5)
@@ -217,7 +228,11 @@ def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -
     return pdf_bytes
 
 
-def salvar_pdf_storage(pdf_bytes: bytes, orcamento_id: int, obra_titulo: str) -> Optional[str]:
+def salvar_pdf_storage(
+    pdf_bytes: bytes,
+    orcamento_id: int,
+    obra_titulo: str,
+) -> tuple[Optional[str], Optional[str]]:
     """
     Salva o PDF no Supabase Storage e retorna a URL
     
@@ -238,11 +253,16 @@ def salvar_pdf_storage(pdf_bytes: bytes, orcamento_id: int, obra_titulo: str) ->
         filename = f"orcamento_{orcamento_id}_{obra_slug}_{timestamp}.pdf"
         
         # Upload para o bucket 'orcamentos'
-        response = supabase.storage \
+        supabase.storage \
             .from_('orcamentos') \
-            .upload(filename, pdf_bytes, {
-                'content-type': 'application/pdf'
-            })
+            .upload(
+                filename,
+                BytesIO(pdf_bytes),
+                {
+                    'content-type': 'application/pdf'
+                },
+                upsert=True,
+            )
         
         # Gera URL pública
         url = supabase.storage \
@@ -255,8 +275,8 @@ def salvar_pdf_storage(pdf_bytes: bytes, orcamento_id: int, obra_titulo: str) ->
             .eq('id', orcamento_id) \
             .execute()
         
-        return url
+        return url, None
         
     except Exception as e:
         print(f"Erro ao salvar PDF no storage: {e}")
-        return None
+        return None, str(e)

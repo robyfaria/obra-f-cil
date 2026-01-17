@@ -113,6 +113,11 @@ with tab1:
             
             # Busca orçamentos aprovados
             orcamentos = [o for o in get_orcamentos_por_obra(obra_id) if o['status'] == 'APROVADO']
+            orc_id = None
+            fases = []
+            obra_fase_id = None
+            valor = 0.0
+            vencimento = date.today()
             
             if orcamentos:
                 orc_id = st.selectbox(
@@ -139,27 +144,32 @@ with tab1:
                     
                     with col2:
                         vencimento = st.date_input("📅 Vencimento", value=date.today(), key="rec_venc")
-                    
-                    if st.form_submit_button("✅ Criar Recebimento", type="primary"):
-                        dados = {
-                            'obra_fase_id': obra_fase_id,
-                            'valor': valor,
-                            'vencimento': vencimento.isoformat(),
-                            'status': 'ABERTO'
-                        }
-                        
-                        success, msg, novo = create_recebimento(dados)
-                        
-                        if success:
-                            audit_insert('recebimentos', novo)
-                            st.success(msg)
-                            st.rerun()
-                        else:
-                            st.error(msg)
                 else:
                     st.warning("Este orçamento não possui fases.")
             else:
                 st.warning("Esta obra não possui orçamento aprovado.")
+
+            submit_recebimento = st.form_submit_button(
+                "✅ Criar Recebimento",
+                type="primary",
+                disabled=not (orcamentos and fases)
+            )
+            if submit_recebimento and orcamentos and fases and obra_fase_id:
+                dados = {
+                    'obra_fase_id': obra_fase_id,
+                    'valor': valor,
+                    'vencimento': vencimento.isoformat(),
+                    'status': 'ABERTO'
+                }
+
+                success, msg, novo = create_recebimento(dados)
+
+                if success:
+                    audit_insert('recebimentos', novo)
+                    st.success(msg)
+                    st.rerun()
+                else:
+                    st.error(msg)
     else:
         st.warning("Nenhuma obra ativa encontrada.")
 
