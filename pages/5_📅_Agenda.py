@@ -141,91 +141,88 @@ if not obras:
     st.warning("⚠️ Cadastre obras primeiro.")
     st.stop()
 
-with st.form("form_nova_alocacao"):
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        pessoa_id = st.selectbox(
-            "👷 Profissional *",
-            options=[p['id'] for p in pessoas],
-            format_func=lambda x: next((p['nome'] for p in pessoas if p['id'] == x), '-')
-        )
-    
-    with col2:
-        obra_id = st.selectbox(
-            "🏗️ Obra *",
-            options=[o['id'] for o in obras],
-            format_func=lambda x: next((o['titulo'] for o in obras if o['id'] == x), '-')
-        )
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        periodo = st.selectbox("⏰ Período", options=['INTEGRAL', 'MEIO'])
-    
-    with col2:
-        tipo = st.selectbox("📍 Tipo", options=['INTERNO', 'EXTERNO'])
-    
-    # Orçamento e fase opcionais
-    st.markdown("**Opcional: Vincular a Orçamento/Fase**")
-    
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Orçamentos da obra selecionada
-        orcamentos = get_orcamentos_por_obra(obra_id)
-        orc_options = [{'id': None, 'label': '-- Nenhum --'}] + [
-            {'id': o['id'], 'label': f"v{o['versao']} - {o['status']}"} 
-            for o in orcamentos
+col1, col2 = st.columns(2)
+
+with col1:
+    pessoa_id = st.selectbox(
+        "👷 Profissional *",
+        options=[p['id'] for p in pessoas],
+        format_func=lambda x: next((p['nome'] for p in pessoas if p['id'] == x), '-')
+    )
+
+with col2:
+    obra_id = st.selectbox(
+        "🏗️ Obra *",
+        options=[o['id'] for o in obras],
+        format_func=lambda x: next((o['titulo'] for o in obras if o['id'] == x), '-')
+    )
+
+col1, col2 = st.columns(2)
+
+with col1:
+    periodo = st.selectbox("⏰ Período", options=['INTEGRAL', 'MEIO'])
+
+with col2:
+    tipo = st.selectbox("📍 Tipo", options=['INTERNO', 'EXTERNO'])
+
+# Orçamento e fase opcionais
+st.markdown("**Opcional: Vincular a Orçamento/Fase**")
+
+col1, col2 = st.columns(2)
+
+with col1:
+    # Orçamentos da obra selecionada
+    orcamentos = get_orcamentos_por_obra(obra_id)
+    orc_options = [{'id': None, 'label': '-- Nenhum --'}] + [
+        {'id': o['id'], 'label': f"v{o['versao']} - {o['status']}"}
+        for o in orcamentos
+    ]
+
+    orcamento_id = st.selectbox(
+        "📋 Orçamento",
+        options=[o['id'] for o in orc_options],
+        format_func=lambda x: next((o['label'] for o in orc_options if o['id'] == x), '-')
+    )
+
+with col2:
+    # Fases do orçamento selecionado
+    if orcamento_id:
+        fases = get_fases_por_orcamento(orcamento_id)
+        fase_options = [{'id': None, 'label': '-- Nenhuma --'}] + [
+            {'id': f['id'], 'label': f['nome_fase']}
+            for f in fases
         ]
-        
-        orcamento_id = st.selectbox(
-            "📋 Orçamento",
-            options=[o['id'] for o in orc_options],
-            format_func=lambda x: next((o['label'] for o in orc_options if o['id'] == x), '-'),
-            key="form_orcamento_id",
-        )
-    
-    with col2:
-        # Fases do orçamento selecionado
-        orcamento_selecionado = st.session_state.get("form_orcamento_id")
-        if orcamento_selecionado:
-            fases = get_fases_por_orcamento(orcamento_selecionado)
-            fase_options = [{'id': None, 'label': '-- Nenhuma --'}] + [
-                {'id': f['id'], 'label': f['nome_fase']} 
-                for f in fases
-            ]
-        else:
-            fase_options = [{'id': None, 'label': '-- Selecione orçamento --'}]
-        
-        obra_fase_id = st.selectbox(
-            "📑 Fase",
-            options=[f['id'] for f in fase_options],
-            format_func=lambda x: next((f['label'] for f in fase_options if f['id'] == x), '-')
-        )
-    
-    observacao = st.text_input("📝 Observação")
-    
-    if st.form_submit_button("✅ Criar Alocação", type="primary"):
-        dados = {
-            'data': data_selecionada.isoformat(),
-            'pessoa_id': pessoa_id,
-            'obra_id': obra_id,
-            'periodo': periodo,
-            'tipo': tipo,
-            'observacao': observacao
-        }
-        
-        if orcamento_id:
-            dados['orcamento_id'] = orcamento_id
-        if obra_fase_id:
-            dados['obra_fase_id'] = obra_fase_id
-        
-        success, msg, nova_aloc = create_alocacao(dados)
-        
-        if success:
-            audit_insert('alocacoes', nova_aloc)
-            st.success(f"✅ {msg}")
-            st.rerun()
-        else:
-            st.error(msg)
+    else:
+        fase_options = [{'id': None, 'label': '-- Selecione orçamento --'}]
+
+    obra_fase_id = st.selectbox(
+        "📑 Fase",
+        options=[f['id'] for f in fase_options],
+        format_func=lambda x: next((f['label'] for f in fase_options if f['id'] == x), '-')
+    )
+
+observacao = st.text_input("📝 Observação")
+
+if st.button("✅ Criar Alocação", type="primary"):
+    dados = {
+        'data': data_selecionada.isoformat(),
+        'pessoa_id': pessoa_id,
+        'obra_id': obra_id,
+        'periodo': periodo,
+        'tipo': tipo,
+        'observacao': observacao
+    }
+
+    if orcamento_id:
+        dados['orcamento_id'] = orcamento_id
+    if obra_fase_id:
+        dados['obra_fase_id'] = obra_fase_id
+
+    success, msg, nova_aloc = create_alocacao(dados)
+
+    if success:
+        audit_insert('alocacoes', nova_aloc)
+        st.success(f"✅ {msg}")
+        st.rerun()
+    else:
+        st.error(msg)

@@ -6,6 +6,7 @@ Usa fpdf2 para gerar PDFs simples e legíveis
 from fpdf import FPDF
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 LOGO_PATH = Path(__file__).resolve().parents[1] / "assets" / "logo.png"
 
@@ -251,4 +252,3 @@ def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -
     elif isinstance(pdf_bytes, bytearray):
         pdf_bytes = bytes(pdf_bytes)
     return pdf_bytes
-
