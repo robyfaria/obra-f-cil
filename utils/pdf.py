@@ -5,7 +5,6 @@ Usa fpdf2 para gerar PDFs simples e legíveis
 
 from fpdf import FPDF
 from datetime import datetime
-from io import BytesIO
 from typing import Optional
 from pathlib import Path
 from utils.auth import get_supabase_client
@@ -285,7 +284,7 @@ def salvar_pdf_storage(
             .from_('orcamentos') \
             .upload(
                 filename,
-                BytesIO(pdf_bytes),
+                pdf_bytes,
                 {
                     'content-type': 'application/pdf'
                 }
