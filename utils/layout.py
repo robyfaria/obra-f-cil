@@ -3,6 +3,7 @@ Componentes de layout compartilhados.
 """
 
 from pathlib import Path
+import base64
 import streamlit as st
 from utils.auth import logout
 
@@ -15,6 +16,28 @@ def render_logo(width: int = 160) -> None:
         st.image(str(LOGO_PATH), width=width)
     else:
         st.markdown("**Gestão de Obras**")
+
+
+def render_centered_logo(width: int = 140) -> None:
+    """Renderiza o logo centralizado para telas de login."""
+    if not LOGO_PATH.exists():
+        st.markdown("**Gestão de Obras**")
+        return
+
+    logo_bytes = LOGO_PATH.read_bytes()
+    logo_b64 = base64.b64encode(logo_bytes).decode("utf-8")
+    st.markdown(
+        f"""
+        <div style="display: flex; justify-content: center; align-items: center; padding: 16px 0;">
+            <img
+                src="data:image/png;base64,{logo_b64}"
+                alt="Gestão de Obras"
+                style="width: {width}px; max-width: 55vw; height: auto; display: block;"
+            />
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
 
 def render_top_logo(width: int = 140) -> None:

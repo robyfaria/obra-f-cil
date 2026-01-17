@@ -307,9 +307,14 @@ if st.button("📄 Gerar PDF do Orçamento", type="primary"):
 if st.session_state['pdf_orcamento_bytes']:
     if st.button("☁️ Salvar PDF no servidor"):
         obra_titulo = orcamento.get('obras', {}).get('titulo', 'obra')
-        url = salvar_pdf_storage(st.session_state['pdf_orcamento_bytes'], orc_selecionado, obra_titulo)
+        url, error = salvar_pdf_storage(
+            st.session_state['pdf_orcamento_bytes'],
+            orc_selecionado,
+            obra_titulo,
+        )
         if url:
             st.success("PDF salvo no servidor!")
             st.markdown(f"[🔗 Abrir PDF]({url})")
         else:
-            st.error("Não foi possível salvar o PDF no servidor.")
+            error_msg = f" (Detalhes: {error})" if error else ""
+            st.error(f"Não foi possível salvar o PDF no servidor.{error_msg}")
