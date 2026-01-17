@@ -129,8 +129,16 @@ def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -
     pdf.cell(30, 7, 'Versão:', ln=False)
     pdf.cell(0, 7, str(orcamento.get('versao', 1)), ln=True)
     
+    emissao = orcamento.get('pdf_emitido_em')
+    if isinstance(emissao, str):
+        emissao_date = datetime.fromisoformat(emissao).date()
+    elif isinstance(emissao, datetime):
+        emissao_date = emissao.date()
+    else:
+        emissao_date = datetime.now().date()
+
     pdf.cell(30, 7, 'Data:', ln=False)
-    pdf.cell(0, 7, datetime.now().strftime('%d/%m/%Y'), ln=True)
+    pdf.cell(0, 7, emissao_date.strftime('%d/%m/%Y'), ln=True)
     
     pdf.ln(10)
     
@@ -166,7 +174,7 @@ def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -
         
         # Subtotal da fase
         pdf.set_font('Helvetica', 'B', 10)
-        subtotal_label = f"Subtotal - {normalizar_texto(fase.get('nome_fase'))}:"
+        subtotal_label = "Subtotal:"
         label_width = pdf.epw * 0.7
         value_width = pdf.epw - label_width
         line_height = 6
@@ -213,8 +221,28 @@ def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -
     pdf.ln(10)
     pdf.set_font('Helvetica', 'I', 9)
     pdf.set_text_color(100, 100, 100)
-    pdf.multi_cell(0, 5, 
-        "Este orçamento tem validade de 15 dias a partir da data de emissão.\n"
+    valido_ate = orcamento.get('valido_ate')
+    if isinstance(valido_ate, str):
+        valido_date = datetime.fromisoformat(valido_ate).date()
+    elif isinstance(valido_ate, datetime):
+        valido_date = valido_ate.date()
+    else:
+        valido_date = None
+
+    if valido_date:
+        dias_validade = max((valido_date - emissao_date).days, 0)
+        validade_texto = (
+            f"Orçamento emitido em {emissao_date.strftime('%d/%m/%Y')} "
+            f"com validade até {valido_date.strftime('%d/%m/%Y')} "
+            f"({dias_validade} dias)."
+        )
+    else:
+        validade_texto = (
+            f"Orçamento emitido em {emissao_date.strftime('%d/%m/%Y')}."
+        )
+
+    pdf.multi_cell(0, 5,
+        f"{validade_texto}\n"
         "Condições de pagamento a combinar.\n"
         "Materiais não inclusos, salvo indicação contrária."
     )
@@ -232,6 +260,8 @@ def salvar_pdf_storage(
     pdf_bytes: bytes,
     orcamento_id: int,
     obra_titulo: str,
+    data_emissao: datetime,
+    valido_ate: Optional[datetime],
 ) -> tuple[Optional[str], Optional[str]]:
     """
     Salva o PDF no Supabase Storage e retorna a URL
@@ -247,10 +277,8 @@ def salvar_pdf_storage(
     try:
         supabase = get_supabase_client()
         
-        # Nome do arquivo
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        obra_slug = obra_titulo.lower().replace(' ', '_')[:30]
-        filename = f"orcamento_{orcamento_id}_{obra_slug}_{timestamp}.pdf"
+        # Nome do arquivo fixo para permitir substituição
+        filename = f"orcamento_{orcamento_id}.pdf"
         
         # Upload para o bucket 'orcamentos'
         supabase.storage \
@@ -260,8 +288,7 @@ def salvar_pdf_storage(
                 BytesIO(pdf_bytes),
                 {
                     'content-type': 'application/pdf'
-                },
-                upsert=True,
+                }
             )
         
         # Gera URL pública
@@ -269,9 +296,16 @@ def salvar_pdf_storage(
             .from_('orcamentos') \
             .get_public_url(filename)
         
-        # Salva a URL no campo observacao do orçamento
+        # Salva a URL no campo dedicado do orçamento
+        update_payload = {
+            'pdf_url': url,
+            'pdf_emitido_em': data_emissao.isoformat(),
+        }
+        if valido_ate:
+            update_payload['valido_ate'] = valido_ate.date().isoformat()
+
         supabase.table('orcamentos') \
-            .update({'observacao': f'PDF: {url}'}) \
+            .update(update_payload) \
             .eq('id', orcamento_id) \
             .execute()
         

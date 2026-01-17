@@ -380,6 +380,8 @@ def update_orcamento_desconto(orcamento_id: int, desconto: float) -> tuple[bool,
             .update({'desconto_valor': desconto}) \
             .eq('id', orcamento_id) \
             .execute()
+
+        limpar_pdf_orcamento(orcamento_id)
         
         # Recalcula totais
         recalcular_orcamento(orcamento_id)
@@ -397,6 +399,32 @@ def recalcular_orcamento(orcamento_id: int):
         supabase.rpc('fn_recalcular_orcamento', {'p_orcamento_id': orcamento_id}).execute()
     except Exception as e:
         print(f"Erro ao recalcular orçamento: {e}")
+
+
+def limpar_pdf_orcamento(orcamento_id: int):
+    """Limpa a URL do PDF quando o orçamento é alterado"""
+    try:
+        supabase = get_supabase_client()
+        supabase.table('orcamentos') \
+            .update({'pdf_url': None, 'pdf_emitido_em': None}) \
+            .eq('id', orcamento_id) \
+            .execute()
+    except Exception as e:
+        print(f"Erro ao limpar PDF do orçamento: {e}")
+
+
+def update_orcamento_validade(orcamento_id: int, valido_ate: date) -> tuple[bool, str]:
+    """Atualiza a validade do orçamento"""
+    try:
+        supabase = get_supabase_client()
+        supabase.table('orcamentos') \
+            .update({'valido_ate': valido_ate.isoformat()}) \
+            .eq('id', orcamento_id) \
+            .execute()
+        limpar_pdf_orcamento(orcamento_id)
+        return True, "Validade atualizada!"
+    except Exception as e:
+        return False, f"Erro ao atualizar validade: {e}"
 
 
 # ============================================
@@ -460,11 +488,20 @@ def update_fase(fase_id: int, dados: dict) -> tuple[bool, str]:
     """Atualiza uma fase"""
     try:
         supabase = get_supabase_client()
+
+        fase_info = supabase.table('obra_fases') \
+            .select('orcamento_id') \
+            .eq('id', fase_id) \
+            .single() \
+            .execute()
         
         supabase.table('obra_fases') \
             .update(dados) \
             .eq('id', fase_id) \
             .execute()
+
+        if fase_info.data:
+            limpar_pdf_orcamento(fase_info.data['orcamento_id'])
         
         return True, "Fase atualizada!"
         
@@ -545,6 +582,8 @@ def add_servico_fase(obra_fase_id: int, servico_id: int, quantidade: float,
             'valor_unit': valor_unit,
             'observacao': observacao
         }).execute()
+
+        limpar_pdf_orcamento(orcamento_id)
         
         # Recalcula o orçamento
         recalcular_orcamento(orcamento_id)
@@ -566,6 +605,8 @@ def update_servico_fase(item_id: int, dados: dict, orcamento_id: int) -> tuple[b
             .update(dados) \
             .eq('id', item_id) \
             .execute()
+
+        limpar_pdf_orcamento(orcamento_id)
         
         recalcular_orcamento(orcamento_id)
         
@@ -584,6 +625,8 @@ def delete_servico_fase(item_id: int, orcamento_id: int) -> tuple[bool, str]:
             .delete() \
             .eq('id', item_id) \
             .execute()
+
+        limpar_pdf_orcamento(orcamento_id)
         
         recalcular_orcamento(orcamento_id)
         

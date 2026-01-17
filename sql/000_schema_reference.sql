@@ -60,6 +60,9 @@ CREATE TABLE public.orcamentos (
     aprovado_em TIMESTAMP,
     cancelado_em TIMESTAMP,
     observacao TEXT,
+    pdf_url TEXT,
+    pdf_emitido_em TIMESTAMP,
+    valido_ate DATE,
     criado_em TIMESTAMP DEFAULT NOW()
 );
 

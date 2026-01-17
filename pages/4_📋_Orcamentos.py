@@ -3,13 +3,14 @@ Página de Orçamentos - Gestão de fases e serviços + geração de PDF
 """
 
 import streamlit as st
+from datetime import date, datetime, timedelta
 from utils.auth import require_auth
 from utils.db import (
     get_obras, get_orcamentos_por_obra, get_orcamento,
     get_fases_por_orcamento, get_servicos_fase, get_servicos,
     add_servico_fase, update_servico_fase, delete_servico_fase,
     create_servico,
-    update_orcamento_desconto, update_fase
+    update_orcamento_desconto, update_fase, update_orcamento_validade
 )
 from utils.auditoria import audit_insert, audit_update, audit_delete
 from utils.pdf import gerar_pdf_orcamento, salvar_pdf_storage
@@ -27,10 +28,6 @@ if 'orc_obra_id' not in st.session_state:
     st.session_state['orc_obra_id'] = None
 if 'orc_id_selecionado' not in st.session_state:
     st.session_state['orc_id_selecionado'] = None
-if 'pdf_orcamento_bytes' not in st.session_state:
-    st.session_state['pdf_orcamento_bytes'] = None
-if 'pdf_orcamento_id' not in st.session_state:
-    st.session_state['pdf_orcamento_id'] = None
 
 # ============================================
 # SELEÇÃO DE OBRA E ORÇAMENTO
@@ -74,9 +71,6 @@ orc_selecionado = st.selectbox(
 )
 
 st.session_state['orc_id_selecionado'] = orc_selecionado
-if st.session_state['pdf_orcamento_id'] != orc_selecionado:
-    st.session_state['pdf_orcamento_bytes'] = None
-    st.session_state['pdf_orcamento_id'] = orc_selecionado
 
 # Carrega dados do orçamento
 orcamento = get_orcamento(orc_selecionado)
@@ -240,13 +234,13 @@ for fase in fases:
 st.markdown("---")
 
 # ============================================
-# DESCONTO
+# DESCONTO E VALIDADE
 # ============================================
 
-st.markdown("### 4️⃣ Desconto")
+st.markdown("### 4️⃣ Desconto e Validade")
 
 if orcamento['status'] in ['RASCUNHO', 'EMITIDO']:
-    col1, col2 = st.columns([2, 1])
+    col1, col2, col3 = st.columns([2, 1, 2])
     
     with col1:
         desconto = st.number_input(
@@ -266,6 +260,27 @@ if orcamento['status'] in ['RASCUNHO', 'EMITIDO']:
                 st.rerun()
             else:
                 st.error(msg)
+
+    with col3:
+        valido_ate_atual = orcamento.get('valido_ate')
+        if isinstance(valido_ate_atual, str):
+            valido_ate_atual = datetime.fromisoformat(valido_ate_atual).date()
+        elif isinstance(valido_ate_atual, datetime):
+            valido_ate_atual = valido_ate_atual.date()
+        elif not valido_ate_atual:
+            valido_ate_atual = date.today() + timedelta(days=15)
+
+        validade = st.date_input(
+            "Válido até",
+            value=valido_ate_atual
+        )
+        if st.button("💾 Salvar validade"):
+            success, msg = update_orcamento_validade(orc_selecionado, validade)
+            if success:
+                st.success(msg)
+                st.rerun()
+            else:
+                st.error(msg)
 else:
     st.info(f"Desconto: R$ {orcamento.get('desconto_valor', 0):,.2f} (orçamento não editável)")
 
@@ -277,8 +292,10 @@ st.markdown("---")
 
 st.markdown("### 5️⃣ Gerar PDF")
 
-if st.button("📄 Gerar PDF do Orçamento", type="primary"):
-    
+pdf_url = orcamento.get('pdf_url')
+pdf_disponivel = bool(pdf_url)
+
+if st.button("📄 Gerar PDF do Orçamento", type="primary", disabled=pdf_disponivel):
     with st.spinner("Gerando PDF..."):
         # Prepara dados
         fases = get_fases_por_orcamento(orc_selecionado)
@@ -287,34 +304,41 @@ if st.button("📄 Gerar PDF do Orçamento", type="primary"):
         for fase in fases:
             servicos_por_fase[fase['id']] = get_servicos_fase(fase['id'])
         
-        # Gera o PDF
-        pdf_bytes = gerar_pdf_orcamento(orcamento, fases, servicos_por_fase)
-        st.session_state['pdf_orcamento_bytes'] = pdf_bytes
-        st.session_state['pdf_orcamento_id'] = orc_selecionado
-        
-        # Oferece download
-        obra_titulo = orcamento.get('obras', {}).get('titulo', 'obra')
-        
-        st.download_button(
-            label="⬇️ Baixar PDF",
-            data=pdf_bytes,
-            file_name=f"orcamento_v{orcamento['versao']}_{obra_titulo}.pdf",
-            mime="application/pdf"
-        )
-        
-        st.info("💡 Use o botão abaixo para salvar o PDF no Supabase Storage.")
+        # Salva no storage e no banco
+        valido_ate = orcamento.get('valido_ate')
+        if isinstance(valido_ate, str):
+            valido_ate = datetime.fromisoformat(valido_ate)
+        elif isinstance(valido_ate, date):
+            valido_ate = datetime.combine(valido_ate, datetime.min.time())
 
-if st.session_state['pdf_orcamento_bytes']:
-    if st.button("☁️ Salvar PDF no servidor"):
+        if not valido_ate:
+            st.error("Defina a validade do orçamento antes de gerar o PDF.")
+            st.stop()
+
+        data_emissao = datetime.now()
+        orcamento_pdf = dict(orcamento)
+        orcamento_pdf['pdf_emitido_em'] = data_emissao.isoformat()
+        orcamento_pdf['valido_ate'] = valido_ate.date().isoformat()
+
+        # Gera o PDF
+        pdf_bytes = gerar_pdf_orcamento(orcamento_pdf, fases, servicos_por_fase)
+        
+        # Salva no storage e no banco
         obra_titulo = orcamento.get('obras', {}).get('titulo', 'obra')
         url, error = salvar_pdf_storage(
-            st.session_state['pdf_orcamento_bytes'],
+            pdf_bytes,
             orc_selecionado,
             obra_titulo,
+            data_emissao,
+            valido_ate,
         )
         if url:
-            st.success("PDF salvo no servidor!")
-            st.markdown(f"[🔗 Abrir PDF]({url})")
+            pdf_url = url
+            pdf_disponivel = True
+            st.success("PDF gerado e salvo no servidor!")
         else:
             error_msg = f" (Detalhes: {error})" if error else ""
             st.error(f"Não foi possível salvar o PDF no servidor.{error_msg}")
+
+if pdf_disponivel:
+    st.link_button("⬇️ Baixar PDF", pdf_url, type="secondary")

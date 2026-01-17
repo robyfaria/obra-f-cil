@@ -152,6 +152,9 @@ create table public.orcamentos (
   aprovado_em timestamptz,
   cancelado_em timestamptz,
   observacao text,
+  pdf_url text,
+  pdf_emitido_em timestamptz,
+  valido_ate date,
   criado_em timestamptz not null default now(),
   unique (obra_id, versao)
 );

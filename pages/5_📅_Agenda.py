@@ -21,6 +21,8 @@ st.title("📅 Agenda de Alocações")
 
 if 'data_agenda' not in st.session_state:
     st.session_state['data_agenda'] = date.today()
+elif isinstance(st.session_state['data_agenda'], str):
+    st.session_state['data_agenda'] = date.fromisoformat(st.session_state['data_agenda'])
 
 # ============================================
 # SELEÇÃO DE DATA
@@ -36,8 +38,9 @@ with col1:
 with col2:
     data_selecionada = st.date_input(
         "📆 Data",
-        key="data_agenda"
+        value=st.session_state['data_agenda']
     )
+    st.session_state['data_agenda'] = data_selecionada
 
 with col3:
     if st.button("➡️ Próximo Dia"):
