@@ -133,6 +133,10 @@ for fase in fases:
         
         # Lista serviços da fase
         servicos_fase = get_servicos_fase(fase['id'])
+        servicos_fase = [
+            serv for serv in servicos_fase
+            if serv.get('servicos', {}).get('ativo', True)
+        ]
         
         if servicos_fase:
             for serv in servicos_fase:

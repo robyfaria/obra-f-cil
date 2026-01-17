@@ -548,6 +548,20 @@ def create_servico(nome: str, unidade: str) -> tuple[bool, str, dict]:
         return False, f"Erro ao criar serviço: {e}", {}
 
 
+def update_servico(servico_id: int, dados: dict) -> tuple[bool, str, dict]:
+    """Atualiza um serviço do catálogo"""
+    try:
+        supabase = get_supabase_client()
+
+        response = supabase.table('servicos') \
+            .update(dados) \
+            .eq('id', servico_id) \
+            .execute()
+
+        return True, "Serviço atualizado!", response.data[0] if response.data else {}
+
+    except Exception as e:
+        return False, f"Erro ao atualizar serviço: {e}", {}
 # ============================================
 # SERVIÇOS POR FASE
 # ============================================
@@ -558,8 +572,9 @@ def get_servicos_fase(obra_fase_id: int) -> list:
         supabase = get_supabase_client()
         
         response = supabase.table('orcamento_fase_servicos') \
-            .select('*, servicos(nome, unidade)') \
+            .select('*, servicos(nome, unidade, ativo)') \
             .eq('obra_fase_id', obra_fase_id) \
+            .eq('servicos.ativo', True) \
             .execute()
         
         return response.data or []

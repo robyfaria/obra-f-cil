@@ -5,6 +5,7 @@ Usa fpdf2 para gerar PDFs simples e legíveis
 
 from fpdf import FPDF
 from datetime import datetime
+from json import JSONDecodeError
 from typing import Optional
 from pathlib import Path
 from utils.auth import get_supabase_client
@@ -275,25 +276,32 @@ def salvar_pdf_storage(
     """
     try:
         supabase = get_supabase_client()
-        
+
         # Nome do arquivo fixo para permitir substituição
         filename = f"orcamento_{orcamento_id}.pdf"
-        
+        storage_bucket = supabase.storage.from_('orcamentos')
+
         # Upload para o bucket 'orcamentos'
-        supabase.storage \
-            .from_('orcamentos') \
-            .upload(
+        try:
+            storage_bucket.upload(
                 filename,
                 pdf_bytes,
                 {
-                    'content-type': 'application/pdf'
+                    'content-type': 'application/pdf',
+                    'upsert': 'true',
                 }
             )
-        
+        except JSONDecodeError:
+            arquivos = storage_bucket.list()
+            upload_sucesso = any(
+                arquivo.get('name') == filename
+                for arquivo in (arquivos or [])
+            )
+            if not upload_sucesso:
+                raise
+
         # Gera URL pública
-        url = supabase.storage \
-            .from_('orcamentos') \
-            .get_public_url(filename)
+        url = storage_bucket.get_public_url(filename)
         
         # Salva a URL no campo dedicado do orçamento
         update_payload = {
