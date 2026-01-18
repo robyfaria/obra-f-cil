@@ -24,6 +24,12 @@ render_top_logo()
 
 st.title("💰 Financeiro")
 
+
+def calcular_valor_profissional(apontamento: dict) -> float:
+    valor_bruto = float(apontamento.get('valor_bruto', 0) or 0)
+    desconto = float(apontamento.get('desconto_valor', 0) or 0)
+    return max(0.0, valor_bruto - desconto)
+
 if 'receb_edit_id' not in st.session_state:
     st.session_state['receb_edit_id'] = None
 if 'pag_edit_id' not in st.session_state:
@@ -571,7 +577,12 @@ with tab2:
                         ) if obra_sel else []
                         
                         apt_options = {
-                            a['id']: f"{a.get('data')} | {a.get('pessoas', {}).get('nome', '-') if a.get('pessoas') else '-'} | {a.get('obra_fases', {}).get('nome_fase', '-') if a.get('obra_fases') else '-'} | R$ {a.get('valor_final', 0):,.2f}"
+                            a['id']: (
+                                f"{a.get('data')} | "
+                                f"{a.get('pessoas', {}).get('nome', '-') if a.get('pessoas') else '-'} | "
+                                f"{a.get('obra_fases', {}).get('nome_fase', '-') if a.get('obra_fases') else '-'} | "
+                                f"R$ {calcular_valor_profissional(a):,.2f}"
+                            )
                             for a in apontamentos
                         }
                         
@@ -586,7 +597,7 @@ with tab2:
                             valor_item = st.number_input(
                                 "Valor do Item (R$)",
                                 min_value=0.0,
-                                value=float(next((a.get('valor_final', 0) for a in apontamentos if a['id'] == apontamento_id), 0)),
+                                value=float(next((calcular_valor_profissional(a) for a in apontamentos if a['id'] == apontamento_id), 0)),
                                 step=10.0,
                                 key=f"pag_valor_{pag['id']}"
                             )
