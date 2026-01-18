@@ -277,15 +277,13 @@ elif st.session_state['obra_view'] == 'detalhe':
         
         # Botão para novo orçamento
         if st.button("➕ Novo Orçamento", type="primary"):
-            from utils.db import create_orcamento, create_fases_padrao
+            from utils.db import create_orcamento
             
             success, msg, novo_orc = create_orcamento(obra_id)
             
             if success:
-                # Cria fases padrão
-                create_fases_padrao(obra_id, novo_orc['id'])
                 audit_insert('orcamentos', novo_orc)
-                st.success(f"✅ {msg} com fases padrão!")
+                st.success(f"✅ {msg}")
                 st.rerun()
             else:
                 st.error(msg)
@@ -397,17 +395,6 @@ elif st.session_state['obra_view'] == 'detalhe':
                 
                 if not fases:
                     st.info("📋 Nenhuma fase cadastrada.")
-                    
-                    if st.button("🔧 Gerar Fases Padrão"):
-                        from utils.db import create_fases_padrao
-                        
-                        # Precisamos do obra_id
-                        success, msg = create_fases_padrao(obra_id, selected_orc)
-                        if success:
-                            st.success(msg)
-                            st.rerun()
-                        else:
-                            st.error(msg)
                 else:
                     for fase in fases:
                         status_fase = {

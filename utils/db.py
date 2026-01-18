@@ -460,6 +460,59 @@ def get_fases_por_orcamento(orcamento_id: int) -> list:
         return []
 
 
+def create_fase(obra_id: int, orcamento_id: int, nome_fase: str, ordem: int,
+                status: str = 'PENDENTE') -> tuple[bool, str, dict]:
+    """Cria uma fase para um orçamento"""
+    try:
+        supabase = get_supabase_client()
+
+        response = supabase.table('obra_fases').insert({
+            'obra_id': obra_id,
+            'orcamento_id': orcamento_id,
+            'nome_fase': nome_fase,
+            'ordem': ordem,
+            'status': status,
+            'valor_fase': 0
+        }).execute()
+
+        limpar_pdf_orcamento(orcamento_id)
+        return True, "Fase criada!", response.data[0]
+
+    except Exception as e:
+        return False, f"Erro ao criar fase: {e}", {}
+
+
+def delete_fase(fase_id: int) -> tuple[bool, str]:
+    """Remove uma fase e seus serviços"""
+    try:
+        supabase = get_supabase_client()
+
+        fase_info = supabase.table('obra_fases') \
+            .select('orcamento_id') \
+            .eq('id', fase_id) \
+            .single() \
+            .execute()
+
+        supabase.table('orcamento_fase_servicos') \
+            .delete() \
+            .eq('obra_fase_id', fase_id) \
+            .execute()
+
+        supabase.table('obra_fases') \
+            .delete() \
+            .eq('id', fase_id) \
+            .execute()
+
+        if fase_info.data:
+            limpar_pdf_orcamento(fase_info.data['orcamento_id'])
+            recalcular_orcamento(fase_info.data['orcamento_id'])
+
+        return True, "Fase removida!"
+
+    except Exception as e:
+        return False, f"Erro ao remover fase: {e}"
+
+
 def create_fases_padrao(obra_id: int, orcamento_id: int) -> tuple[bool, str]:
     """Cria as fases padrão para um orçamento"""
     try:
@@ -857,6 +910,38 @@ def get_recebimentos(status: Optional[str] = None) -> list:
         return []
 
 
+def update_recebimento(recebimento_id: int, dados: dict) -> tuple[bool, str]:
+    """Atualiza um recebimento"""
+    try:
+        supabase = get_supabase_client()
+
+        supabase.table('recebimentos') \
+            .update(dados) \
+            .eq('id', recebimento_id) \
+            .execute()
+
+        return True, "Recebimento atualizado!"
+
+    except Exception as e:
+        return False, f"Erro ao atualizar: {e}"
+
+
+def delete_recebimento(recebimento_id: int) -> tuple[bool, str]:
+    """Remove um recebimento"""
+    try:
+        supabase = get_supabase_client()
+
+        supabase.table('recebimentos') \
+            .delete() \
+            .eq('id', recebimento_id) \
+            .execute()
+
+        return True, "Recebimento removido!"
+
+    except Exception as e:
+        return False, f"Erro ao remover: {e}"
+
+
 def create_recebimento(dados: dict) -> tuple[bool, str, dict]:
     """Cria um novo recebimento"""
     try:
@@ -906,6 +991,43 @@ def get_pagamentos(status: Optional[str] = None) -> list:
     except Exception as e:
         print(f"Erro ao buscar pagamentos: {e}")
         return []
+
+
+def update_pagamento(pagamento_id: int, dados: dict) -> tuple[bool, str]:
+    """Atualiza um pagamento"""
+    try:
+        supabase = get_supabase_client()
+
+        supabase.table('pagamentos') \
+            .update(dados) \
+            .eq('id', pagamento_id) \
+            .execute()
+
+        return True, "Pagamento atualizado!"
+
+    except Exception as e:
+        return False, f"Erro ao atualizar pagamento: {e}"
+
+
+def delete_pagamento(pagamento_id: int) -> tuple[bool, str]:
+    """Remove um pagamento"""
+    try:
+        supabase = get_supabase_client()
+
+        supabase.table('pagamento_itens') \
+            .delete() \
+            .eq('pagamento_id', pagamento_id) \
+            .execute()
+
+        supabase.table('pagamentos') \
+            .delete() \
+            .eq('id', pagamento_id) \
+            .execute()
+
+        return True, "Pagamento removido!"
+
+    except Exception as e:
+        return False, f"Erro ao remover pagamento: {e}"
 
 
 def get_pagamento_itens(pagamento_id: int) -> list:

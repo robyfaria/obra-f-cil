@@ -9,7 +9,7 @@ from utils.db import (
     get_obras, get_orcamentos_por_obra, get_orcamento,
     get_fases_por_orcamento, get_servicos_fase, get_servicos,
     add_servico_fase, update_servico_fase, delete_servico_fase,
-    create_servico,
+    create_servico, create_fase, delete_fase,
     update_orcamento_desconto, update_fase, update_orcamento_validade
 )
 from utils.auditoria import audit_insert, audit_update, audit_delete
@@ -28,6 +28,10 @@ if 'orc_obra_id' not in st.session_state:
     st.session_state['orc_obra_id'] = None
 if 'orc_id_selecionado' not in st.session_state:
     st.session_state['orc_id_selecionado'] = None
+if 'fase_edit_id' not in st.session_state:
+    st.session_state['fase_edit_id'] = None
+if 'servico_edit_id' not in st.session_state:
+    st.session_state['servico_edit_id'] = None
 
 # ============================================
 # SELEÇÃO DE OBRA E ORÇAMENTO
@@ -35,10 +39,25 @@ if 'orc_id_selecionado' not in st.session_state:
 
 st.markdown("### 1️⃣ Selecione a Obra")
 
-obras = get_obras(ativo=True)
+col1, col2 = st.columns([2, 1])
+with col1:
+    busca_obra = st.text_input(
+        "🔍 Buscar",
+        placeholder="Nome ou endereço da obra...",
+        key="busca_orcamento_obra"
+    )
+with col2:
+    status_obra = st.selectbox(
+        "Situação",
+        options=[None, 'AGUARDANDO', 'INICIADO', 'PAUSADO', 'CONCLUIDO', 'CANCELADO'],
+        format_func=lambda x: 'Todos' if x is None else x.title(),
+        key="status_orcamento_obra"
+    )
+
+obras = get_obras(busca=busca_obra or "", status=status_obra, ativo=True)
 
 if not obras:
-    st.warning("⚠️ Nenhuma obra ativa encontrada.")
+    st.warning("⚠️ Nenhuma obra encontrada com os filtros informados.")
     st.stop()
 
 obra_options = {o['id']: f"{o['titulo']} ({o.get('clientes', {}).get('nome', '-') if o.get('clientes') else '-'})" for o in obras}
@@ -101,9 +120,44 @@ st.markdown("### 3️⃣ Fases e Serviços")
 
 fases = get_fases_por_orcamento(orc_selecionado)
 
+if orcamento['status'] in ['RASCUNHO', 'EMITIDO']:
+    with st.form("form_nova_fase"):
+        st.markdown("**➕ Nova Fase**")
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            nome_fase = st.text_input("Nome da Fase *")
+        with col2:
+            ordem_fase = st.number_input(
+                "Ordem",
+                min_value=1,
+                step=1,
+                value=int(max([f.get('ordem', 0) for f in fases], default=0) + 1)
+            )
+        status_fase = st.selectbox(
+            "Status",
+            options=['PENDENTE', 'EM_ANDAMENTO', 'CONCLUIDA'],
+            index=0
+        )
+        if st.form_submit_button("✅ Adicionar Fase", type="primary"):
+            if not nome_fase.strip():
+                st.error("⚠️ Informe o nome da fase.")
+            else:
+                success, msg, nova = create_fase(
+                    orcamento['obra_id'],
+                    orc_selecionado,
+                    nome_fase.strip(),
+                    int(ordem_fase),
+                    status_fase
+                )
+                if success:
+                    audit_insert('obra_fases', nova)
+                    st.success(msg)
+                    st.rerun()
+                else:
+                    st.error(msg)
+
 if not fases:
-    st.warning("⚠️ Este orçamento não possui fases. Gere as fases padrão na página de Obras.")
-    st.stop()
+    st.info("📋 Este orçamento ainda não possui fases cadastradas.")
 
 # Catálogo de serviços
 servicos_catalogo = get_servicos(ativo=True)
@@ -111,21 +165,66 @@ servicos_catalogo = get_servicos(ativo=True)
 for fase in fases:
     with st.expander(f"📑 {fase['ordem']}. {fase['nome_fase']} - R$ {fase.get('valor_fase', 0):,.2f}", expanded=False):
         
-        # Status da fase
-        col1, col2 = st.columns([2, 1])
+        col1, col2, col3 = st.columns([2, 1, 1])
         with col1:
-            novo_status = st.selectbox(
-                "Status da Fase",
-                options=['PENDENTE', 'EM_ANDAMENTO', 'CONCLUIDA'],
-                index=['PENDENTE', 'EM_ANDAMENTO', 'CONCLUIDA'].index(fase.get('status', 'PENDENTE')),
-                key=f"status_fase_{fase['id']}"
-            )
-            
-            if novo_status != fase.get('status'):
-                if st.button("💾 Atualizar Status", key=f"btn_status_{fase['id']}"):
-                    success, msg = update_fase(fase['id'], {'status': novo_status})
+            st.markdown("**Dados da fase**")
+        with col2:
+            if orcamento['status'] in ['RASCUNHO', 'EMITIDO']:
+                if st.button("✏️", key=f"edit_fase_{fase['id']}"):
+                    st.session_state['fase_edit_id'] = fase['id']
+                    st.rerun()
+        with col3:
+            if orcamento['status'] in ['RASCUNHO', 'EMITIDO']:
+                if st.button("🗑️", key=f"del_fase_{fase['id']}"):
+                    success, msg = delete_fase(fase['id'])
                     if success:
+                        audit_delete('obra_fases', fase)
                         st.success(msg)
+                        st.rerun()
+                    else:
+                        st.error(msg)
+
+        if st.session_state.get('fase_edit_id') == fase['id'] and orcamento['status'] in ['RASCUNHO', 'EMITIDO']:
+            with st.form(f"form_edit_fase_{fase['id']}"):
+                col1, col2 = st.columns([3, 1])
+                with col1:
+                    nome_fase_edit = st.text_input("Nome da Fase", value=fase.get('nome_fase', ''))
+                with col2:
+                    ordem_edit = st.number_input(
+                        "Ordem",
+                        min_value=1,
+                        step=1,
+                        value=int(fase.get('ordem', 1))
+                    )
+                status_edit = st.selectbox(
+                    "Status da Fase",
+                    options=['PENDENTE', 'EM_ANDAMENTO', 'CONCLUIDA'],
+                    index=['PENDENTE', 'EM_ANDAMENTO', 'CONCLUIDA'].index(fase.get('status', 'PENDENTE'))
+                )
+                col1, col2 = st.columns(2)
+                with col1:
+                    if st.form_submit_button("💾 Salvar Fase", type="primary"):
+                        antes = {
+                            'nome_fase': fase.get('nome_fase'),
+                            'ordem': fase.get('ordem'),
+                            'status': fase.get('status')
+                        }
+                        novos_dados = {
+                            'nome_fase': nome_fase_edit.strip(),
+                            'ordem': int(ordem_edit),
+                            'status': status_edit
+                        }
+                        success, msg = update_fase(fase['id'], novos_dados)
+                        if success:
+                            audit_update('obra_fases', fase['id'], antes, novos_dados)
+                            st.session_state['fase_edit_id'] = None
+                            st.success(msg)
+                            st.rerun()
+                        else:
+                            st.error(msg)
+                with col2:
+                    if st.form_submit_button("❌ Cancelar"):
+                        st.session_state['fase_edit_id'] = None
                         st.rerun()
         
         st.markdown("---")
@@ -141,8 +240,7 @@ for fase in fases:
         if servicos_fase:
             for serv in servicos_fase:
                 serv_info = serv.get('servicos', {})
-                
-                col1, col2, col3, col4 = st.columns([3, 1, 1, 1])
+                col1, col2, col3, col4, col5 = st.columns([3, 1, 1, 1, 1])
                 
                 with col1:
                     st.markdown(f"**{serv_info.get('nome', '-')}** ({serv_info.get('unidade', '-')})")
@@ -152,19 +250,74 @@ for fase in fases:
                     st.markdown(f"R$ {serv.get('valor_unit', 0):,.2f}")
                 with col4:
                     st.markdown(f"**R$ {serv.get('valor_total', 0):,.2f}**")
-                
-                # Botão de remover (só se orçamento editável)
-                if orcamento['status'] in ['RASCUNHO', 'EMITIDO']:
-                    if st.button("🗑️ Remover", key=f"del_serv_{serv['id']}"):
-                        success, msg = delete_servico_fase(serv['id'], orc_selecionado)
-                        if success:
-                            audit_delete('orcamento_fase_servicos', serv)
-                            st.success(msg)
-                            st.rerun()
-                        else:
-                            st.error(msg)
+                with col5:
+                    if orcamento['status'] in ['RASCUNHO', 'EMITIDO']:
+                        col_edit, col_del = st.columns(2)
+                        with col_edit:
+                            if st.button("✏️", key=f"edit_serv_{serv['id']}"):
+                                st.session_state['servico_edit_id'] = serv['id']
+                                st.rerun()
+                        with col_del:
+                            if st.button("🗑️", key=f"del_serv_{serv['id']}"):
+                                success, msg = delete_servico_fase(serv['id'], orc_selecionado)
+                                if success:
+                                    audit_delete('orcamento_fase_servicos', serv)
+                                    st.success(msg)
+                                    st.rerun()
+                                else:
+                                    st.error(msg)
                 
                 st.markdown("---")
+                if st.session_state.get('servico_edit_id') == serv['id'] and orcamento['status'] in ['RASCUNHO', 'EMITIDO']:
+                    with st.form(f"form_edit_serv_{serv['id']}"):
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            quantidade_edit = st.number_input(
+                                "Quantidade",
+                                min_value=0.01,
+                                value=float(serv.get('quantidade', 1) or 1),
+                                step=0.5
+                            )
+                        with col2:
+                            valor_unit_edit = st.number_input(
+                                "Valor Unitário (R$)",
+                                min_value=0.0,
+                                value=float(serv.get('valor_unit', 0) or 0),
+                                step=10.0
+                            )
+                        observacao_edit = st.text_input(
+                            "Observação",
+                            value=serv.get('observacao', '') or ''
+                        )
+                        col1, col2 = st.columns(2)
+                        with col1:
+                            if st.form_submit_button("💾 Salvar Serviço", type="primary"):
+                                antes = {
+                                    'quantidade': serv.get('quantidade'),
+                                    'valor_unit': serv.get('valor_unit'),
+                                    'observacao': serv.get('observacao')
+                                }
+                                novos_dados = {
+                                    'quantidade': quantidade_edit,
+                                    'valor_unit': valor_unit_edit,
+                                    'observacao': observacao_edit
+                                }
+                                success, msg = update_servico_fase(
+                                    serv['id'],
+                                    novos_dados,
+                                    orc_selecionado
+                                )
+                                if success:
+                                    audit_update('orcamento_fase_servicos', serv['id'], antes, novos_dados)
+                                    st.session_state['servico_edit_id'] = None
+                                    st.success(msg)
+                                    st.rerun()
+                                else:
+                                    st.error(msg)
+                        with col2:
+                            if st.form_submit_button("❌ Cancelar"):
+                                st.session_state['servico_edit_id'] = None
+                                st.rerun()
         else:
             st.info("Nenhum serviço nesta fase.")
         

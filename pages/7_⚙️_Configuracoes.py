@@ -28,7 +28,32 @@ tab1, tab2, tab3 = st.tabs(["👥 Usuários", "📋 Auditoria", "🔧 Serviços"
 with tab1:
     st.markdown("### 👥 Usuários do Sistema")
     
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        busca_usuario = st.text_input(
+            "🔍 Buscar",
+            placeholder="Usuário ou perfil...",
+            key="busca_usuario_app"
+        )
+    with col2:
+        filtro_ativo = st.selectbox(
+            "Situação",
+            options=[None, True, False],
+            format_func=lambda x: 'Todos' if x is None else ('Ativos' if x else 'Inativos'),
+            key="filtro_ativo_usuario"
+        )
+
     usuarios = get_usuarios_app()
+    if filtro_ativo is not None:
+        usuarios = [u for u in usuarios if u.get('ativo') == filtro_ativo]
+    if busca_usuario:
+        busca_lower = busca_usuario.lower()
+        usuarios = [
+            u for u in usuarios
+            if busca_lower in (u.get('usuario', '') or '').lower()
+            or busca_lower in (u.get('perfil', '') or '').lower()
+            or busca_lower in (u.get('auth_user_id', '') or '').lower()
+        ]
     
     if not usuarios:
         st.info("📋 Nenhum usuário cadastrado.")
@@ -142,7 +167,29 @@ with tab2:
 with tab3:
     st.markdown("### 🔧 Catálogo de Serviços")
     
-    servicos = get_servicos(ativo=None)
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        busca_servico = st.text_input(
+            "🔍 Buscar",
+            placeholder="Nome ou unidade...",
+            key="busca_servico"
+        )
+    with col2:
+        filtro_servico_ativo = st.selectbox(
+            "Situação",
+            options=[None, True, False],
+            format_func=lambda x: 'Todos' if x is None else ('Ativos' if x else 'Inativos'),
+            key="filtro_servico_ativo"
+        )
+    
+    servicos = get_servicos(ativo=filtro_servico_ativo)
+    if busca_servico:
+        busca_lower = busca_servico.lower()
+        servicos = [
+            s for s in servicos
+            if busca_lower in (s.get('nome', '') or '').lower()
+            or busca_lower in (s.get('unidade', '') or '').lower()
+        ]
     
     if servicos:
         for serv in servicos:
