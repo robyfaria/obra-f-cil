@@ -460,6 +460,23 @@ def get_fases_por_orcamento(orcamento_id: int) -> list:
         return []
 
 
+def get_recebimentos_por_orcamento(orcamento_id: int) -> list:
+    """Lista recebimentos vinculados a um orçamento"""
+    try:
+        supabase = get_supabase_client()
+
+        response = supabase.table('recebimentos') \
+            .select('id, obra_fase_id, status, obra_fases(orcamento_id)') \
+            .eq('obra_fases.orcamento_id', orcamento_id) \
+            .execute()
+
+        return response.data or []
+
+    except Exception as e:
+        print(f"Erro ao buscar recebimentos do orçamento: {e}")
+        return []
+
+
 def create_fase(obra_id: int, orcamento_id: int, nome_fase: str, ordem: int,
                 status: str = 'PENDENTE') -> tuple[bool, str, dict]:
     """Cria uma fase para um orçamento"""

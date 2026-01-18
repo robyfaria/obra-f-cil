@@ -26,6 +26,12 @@ elif isinstance(st.session_state['data_agenda'], str):
     st.session_state['data_agenda'] = date.fromisoformat(st.session_state['data_agenda'])
 if 'aloc_edit_id' not in st.session_state:
     st.session_state['aloc_edit_id'] = None
+if 'nova_obra_id' not in st.session_state:
+    st.session_state['nova_obra_id'] = None
+if 'nova_orcamento_id' not in st.session_state:
+    st.session_state['nova_orcamento_id'] = None
+if 'nova_obra_fase_id' not in st.session_state:
+    st.session_state['nova_obra_fase_id'] = None
 
 # ============================================
 # SELEÇÃO DE DATA
@@ -106,6 +112,11 @@ else:
                         if st.button("✅", key=f"confirm_{aloc['id']}"):
                             if not aloc.get('orcamento_id') or not aloc.get('obra_fase_id'):
                                 st.error("Selecione orçamento e fase para confirmar.")
+                            elif orcamento_info and orcamento_info.get('status') != 'APROVADO':
+                                st.error(
+                                    f"Orçamento precisa estar APROVADO para confirmar. "
+                                    f"Status atual: {orcamento_info.get('status')}"
+                                )
                             else:
                                 antes = {'confirmada': False}
                                 success, msg = update_alocacao_confirmada(aloc['id'], True)
@@ -178,6 +189,7 @@ else:
                         col1, col2 = st.columns(2)
                         with col1:
                             orcamentos_edit = get_orcamentos_por_obra(obra_id_edit)
+                            orc_status_por_id_edit = {o['id']: o.get('status') for o in orcamentos_edit}
                             orc_options_edit = [{'id': None, 'label': '-- Nenhum --'}] + [
                                 {'id': o['id'], 'label': f"v{o['versao']} - {o['status']}"}
                                 for o in orcamentos_edit
@@ -216,6 +228,12 @@ else:
                         col1, col2 = st.columns(2)
                         with col1:
                             if st.form_submit_button("💾 Salvar Alterações", type="primary"):
+                                if orcamento_id_edit and orc_status_por_id_edit.get(orcamento_id_edit) != 'APROVADO':
+                                    st.error(
+                                        f"Orçamento precisa estar APROVADO para salvar. "
+                                        f"Status atual: {orc_status_por_id_edit.get(orcamento_id_edit)}"
+                                    )
+                                    st.stop()
                                 antes = {
                                     'pessoa_id': aloc.get('pessoa_id'),
                                     'obra_id': aloc.get('obra_id'),
@@ -276,7 +294,8 @@ with col2:
     obra_id = st.selectbox(
         "🏗️ Obra *",
         options=[o['id'] for o in obras],
-        format_func=lambda x: next((o['titulo'] for o in obras if o['id'] == x), '-')
+        format_func=lambda x: next((o['titulo'] for o in obras if o['id'] == x), '-'),
+        key="nova_obra_id"
     )
 
 col1, col2 = st.columns(2)
@@ -295,15 +314,30 @@ col1, col2 = st.columns(2)
 with col1:
     # Orçamentos da obra selecionada
     orcamentos = get_orcamentos_por_obra(obra_id)
+    orc_status_por_id = {o['id']: o.get('status') for o in orcamentos}
     orc_options = [{'id': None, 'label': '-- Nenhum --'}] + [
         {'id': o['id'], 'label': f"v{o['versao']} - {o['status']}"}
         for o in orcamentos
     ]
 
+    def resetar_orcamento_nova_alocacao() -> None:
+        st.session_state['nova_orcamento_id'] = None
+        st.session_state['nova_obra_fase_id'] = None
+
+    if st.session_state.get('ultima_obra_id') != obra_id:
+        resetar_orcamento_nova_alocacao()
+        st.session_state['ultima_obra_id'] = obra_id
+
     orcamento_id = st.selectbox(
         "📋 Orçamento",
         options=[o['id'] for o in orc_options],
-        format_func=lambda x: next((o['label'] for o in orc_options if o['id'] == x), '-')
+        index=next(
+            (i for i, o in enumerate(orc_options) if o['id'] == st.session_state.get('nova_orcamento_id')),
+            0
+        ),
+        format_func=lambda x: next((o['label'] for o in orc_options if o['id'] == x), '-'),
+        key="nova_orcamento_id",
+        on_change=lambda: st.session_state.update({'nova_obra_fase_id': None})
     )
 
 with col2:
@@ -320,12 +354,23 @@ with col2:
     obra_fase_id = st.selectbox(
         "📑 Fase",
         options=[f['id'] for f in fase_options],
-        format_func=lambda x: next((f['label'] for f in fase_options if f['id'] == x), '-')
+        index=next(
+            (i for i, f in enumerate(fase_options) if f['id'] == st.session_state.get('nova_obra_fase_id')),
+            0
+        ),
+        format_func=lambda x: next((f['label'] for f in fase_options if f['id'] == x), '-'),
+        key="nova_obra_fase_id"
     )
 
 observacao = st.text_input("📝 Observação")
 
 if st.button("✅ Criar Alocação", type="primary"):
+    if orcamento_id and orc_status_por_id.get(orcamento_id) != 'APROVADO':
+        st.error(
+            f"Orçamento precisa estar APROVADO para salvar. "
+            f"Status atual: {orc_status_por_id.get(orcamento_id)}"
+        )
+        st.stop()
     dados = {
         'data': data_selecionada.isoformat(),
         'pessoa_id': pessoa_id,

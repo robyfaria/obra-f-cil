@@ -11,7 +11,7 @@ from utils.db import (
     get_pagamentos, get_pagamento_itens, create_pagamento, update_pagamento_status,
     update_pagamento, delete_pagamento,
     create_pagamento_item, delete_pagamento_item,
-    get_fases_por_orcamento, get_obras, get_orcamentos_por_obra,
+    get_fases_por_orcamento, get_recebimentos_por_orcamento, get_obras, get_orcamentos_por_obra,
     get_apontamentos
 )
 from utils.auditoria import audit_insert, audit_update, audit_delete
@@ -28,6 +28,10 @@ if 'receb_edit_id' not in st.session_state:
     st.session_state['receb_edit_id'] = None
 if 'pag_edit_id' not in st.session_state:
     st.session_state['pag_edit_id'] = None
+if 'rec_desconto_rateio' not in st.session_state:
+    st.session_state['rec_desconto_rateio'] = {}
+if 'rec_valor_fase_id' not in st.session_state:
+    st.session_state['rec_valor_fase_id'] = None
 
 tab1, tab2 = st.tabs(["📥 Recebimentos", "📤 Pagamentos"])
 
@@ -219,6 +223,26 @@ with tab1:
             obra_fase_id = None
             valor = 0.0
             vencimento = date.today()
+            desconto_orcamento = 0.0
+
+            def atualizar_valor_fase(force: bool = False) -> None:
+                fase_id = st.session_state.get("rec_fase")
+                if not fase_id:
+                    return
+                if not force and st.session_state.get('rec_valor_fase_id') == fase_id:
+                    return
+                fase_info = next((f for f in fases if f['id'] == fase_id), None)
+                if not fase_info:
+                    return
+                valor_fase = float(fase_info.get('valor_fase', 0) or 0)
+                desconto_fase = float(
+                    st.session_state.get('rec_desconto_rateio', {})
+                    .get(orc_id, {})
+                    .get(fase_id, 0)
+                    or 0
+                )
+                st.session_state['rec_valor'] = max(0.0, valor_fase - desconto_fase)
+                st.session_state['rec_valor_fase_id'] = fase_id
             
             if orcamentos:
                 orc_id = st.selectbox(
@@ -227,20 +251,65 @@ with tab1:
                     format_func=lambda x: f"v{next((o['versao'] for o in orcamentos if o['id'] == x), '-')}",
                     key="rec_orc"
                 )
-                
+
                 fases = get_fases_por_orcamento(orc_id)
+                desconto_orcamento = float(
+                    next((o.get('desconto_valor', 0) for o in orcamentos if o['id'] == orc_id), 0) or 0
+                )
                 
                 if fases:
                     obra_fase_id = st.selectbox(
                         "📑 Fase",
                         options=[f['id'] for f in fases],
                         format_func=lambda x: next((f['nome_fase'] for f in fases if f['id'] == x), '-'),
-                        key="rec_fase"
+                        key="rec_fase",
+                        on_change=atualizar_valor_fase
                     )
-                    
+
+                    atualizar_valor_fase()
+
+                    if desconto_orcamento > 0:
+                        st.info(f"Desconto do orçamento: R$ {desconto_orcamento:,.2f}")
+                        aplicar_rateio = st.form_submit_button(
+                            "💸 Aplicar desconto proporcional às fases restantes",
+                            help="Divide o desconto igualmente entre as fases que ainda não têm recebimento."
+                        )
+                        if aplicar_rateio:
+                            recebimentos_existentes = get_recebimentos_por_orcamento(orc_id)
+                            fases_com_recebimento = {
+                                rec.get('obra_fase_id') for rec in recebimentos_existentes if rec.get('obra_fase_id')
+                            }
+                            fases_restantes = [f for f in fases if f['id'] not in fases_com_recebimento]
+                            if not fases_restantes:
+                                st.warning("Todas as fases já possuem recebimento gerado.")
+                            else:
+                                fases_ordenadas = sorted(fases_restantes, key=lambda f: f.get('ordem', 0))
+                                rateio = {}
+                                desconto_total = float(desconto_orcamento)
+                                desconto_base = round(desconto_total / len(fases_ordenadas), 2)
+                                acumulado = 0.0
+                                for idx, fase in enumerate(fases_ordenadas):
+                                    if idx == len(fases_ordenadas) - 1:
+                                        desconto_fase = round(desconto_total - acumulado, 2)
+                                    else:
+                                        desconto_fase = desconto_base
+                                        acumulado += desconto_fase
+                                    rateio[fase['id']] = max(0.0, desconto_fase)
+                                st.session_state['rec_desconto_rateio'][orc_id] = rateio
+                                atualizar_valor_fase(force=True)
+                                st.success("Desconto proporcional aplicado às fases restantes.")
+
                     col1, col2 = st.columns(2)
                     
                     with col1:
+                        desconto_aplicado = float(
+                            st.session_state.get('rec_desconto_rateio', {})
+                            .get(orc_id, {})
+                            .get(obra_fase_id, 0)
+                            or 0
+                        )
+                        if desconto_aplicado > 0:
+                            st.caption(f"Desconto proporcional aplicado: R$ {desconto_aplicado:,.2f}")
                         valor = st.number_input("💵 Valor (R$)", min_value=0.0, step=100.0, key="rec_valor")
                     
                     with col2:
@@ -266,6 +335,10 @@ with tab1:
                 success, msg, novo = create_recebimento(dados)
 
                 if success:
+                    if orc_id in st.session_state.get('rec_desconto_rateio', {}):
+                        st.session_state['rec_desconto_rateio'][orc_id].pop(obra_fase_id, None)
+                        if not st.session_state['rec_desconto_rateio'][orc_id]:
+                            st.session_state['rec_desconto_rateio'].pop(orc_id, None)
                     audit_insert('recebimentos', novo)
                     st.success(msg)
                     st.rerun()
