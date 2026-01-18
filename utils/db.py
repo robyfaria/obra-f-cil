@@ -37,6 +37,12 @@ def get_dashboard_stats() -> dict:
     """Retorna estatísticas para o dashboard"""
     try:
         supabase = get_supabase_client()
+        hoje = date.today()
+        inicio_mes = hoje.replace(day=1)
+        if inicio_mes.month == 12:
+            inicio_proximo_mes = date(inicio_mes.year + 1, 1, 1)
+        else:
+            inicio_proximo_mes = date(inicio_mes.year, inicio_mes.month + 1, 1)
         
         # Obras ativas
         obras = supabase.table('obras') \
@@ -62,12 +68,46 @@ def get_dashboard_stats() -> dict:
             .select('id', count='exact') \
             .eq('ativo', True) \
             .execute()
+
+        # Recebimentos do mês
+        recebimentos_mes = supabase.table('recebimentos') \
+            .select('valor') \
+            .eq('status', 'PAGO') \
+            .gte('recebido_em', inicio_mes.isoformat()) \
+            .lt('recebido_em', inicio_proximo_mes.isoformat()) \
+            .execute()
+
+        total_recebimentos_mes = sum(
+            float(item.get('valor') or 0) for item in (recebimentos_mes.data or [])
+        )
+
+        # Pagamentos do mês
+        pagamentos_mes = supabase.table('pagamentos') \
+            .select('valor_total') \
+            .eq('status', 'PAGO') \
+            .gte('pago_em', inicio_mes.isoformat()) \
+            .lt('pago_em', inicio_proximo_mes.isoformat()) \
+            .execute()
+
+        total_pagamentos_mes = sum(
+            float(item.get('valor_total') or 0) for item in (pagamentos_mes.data or [])
+        )
+
+        # Fases não concluídas
+        fases_nao_concluidas = supabase.table('obra_fases') \
+            .select('id', count='exact') \
+            .neq('status', 'CONCLUIDA') \
+            .execute()
         
         return {
             'obras_ativas': obras.count or 0,
             'orcamentos_pendentes': orcamentos.count or 0,
             'pessoas_ativas': pessoas.count or 0,
-            'clientes_ativos': clientes.count or 0
+            'clientes_ativos': clientes.count or 0,
+            'recebimentos_mes': round(total_recebimentos_mes, 2),
+            'pagamentos_mes': round(total_pagamentos_mes, 2),
+            'resultado_mes': round(total_recebimentos_mes - total_pagamentos_mes, 2),
+            'fases_nao_concluidas': fases_nao_concluidas.count or 0
         }
     except Exception as e:
         print(f"Erro ao buscar estatísticas: {e}")

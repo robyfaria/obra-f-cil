@@ -218,7 +218,7 @@ with tab1:
             st.session_state["rec_fase"] = None
             st.session_state["rec_orc_prev"] = st.session_state.get("rec_orc")
 
-        with st.form("form_novo_recebimento"):
+        with st.container():
             obra_id = st.selectbox(
                 "🏗️ Obra",
                 options=[o['id'] for o in obras],
@@ -282,9 +282,10 @@ with tab1:
 
                     if desconto_orcamento > 0:
                         st.info(f"Desconto do orçamento: R$ {desconto_orcamento:,.2f}")
-                        aplicar_rateio = st.form_submit_button(
+                        aplicar_rateio = st.button(
                             "💸 Aplicar desconto proporcional às fases restantes",
-                            help="Divide o desconto igualmente entre as fases que ainda não têm recebimento."
+                            help="Divide o desconto igualmente entre as fases que ainda não têm recebimento.",
+                            key="rec_aplicar_rateio"
                         )
                         if aplicar_rateio:
                             recebimentos_existentes = get_recebimentos_por_orcamento(orc_id)
@@ -344,15 +345,18 @@ with tab1:
             else:
                 st.warning("Esta obra não possui orçamento aprovado.")
 
-            submit_recebimento = st.form_submit_button(
+            submit_recebimento = st.button(
                 "✅ Criar Recebimento",
                 type="primary",
-                disabled=not (orcamentos and fases)
+                disabled=not (orcamentos and fases),
+                key="rec_criar"
             )
             if submit_recebimento and orcamentos and fases and obra_fase_id:
+                atualizar_valor_fase(force=True)
+                valor_final = float(st.session_state.get('rec_valor', valor) or 0)
                 dados = {
                     'obra_fase_id': obra_fase_id,
-                    'valor': valor,
+                    'valor': valor_final,
                     'vencimento': vencimento.isoformat(),
                     'status': 'ABERTO'
                 }

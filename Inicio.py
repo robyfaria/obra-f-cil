@@ -193,6 +193,32 @@ def show_home_page(user_profile):
             label="👥 Clientes Ativos",
             value=stats.get('clientes_ativos', 0)
         )
+
+    col5, col6, col7, col8 = st.columns(4)
+
+    with col5:
+        st.metric(
+            label="💰 Recebimentos do Mês",
+            value=f"R$ {stats.get('recebimentos_mes', 0):,.2f}"
+        )
+
+    with col6:
+        st.metric(
+            label="📤 Pagamentos do Mês",
+            value=f"R$ {stats.get('pagamentos_mes', 0):,.2f}"
+        )
+
+    with col7:
+        st.metric(
+            label="📈 Resultado do Mês",
+            value=f"R$ {stats.get('resultado_mes', 0):,.2f}"
+        )
+
+    with col8:
+        st.metric(
+            label="🧱 Fases Não Concluídas",
+            value=stats.get('fases_nao_concluidas', 0)
+        )
     
     st.markdown("---")
     
