@@ -909,11 +909,18 @@ elif st.session_state['obra_view'] == 'detalhe':
                             else:
                                 st.info("Nenhum serviço nesta fase.")
                             
+                            def _selecionar_orcamento_para_fase(fase_id: int, orc_id: int) -> None:
+                                st.session_state['fase_selecionada'] = fase_id
+                                st.session_state['orcamento_para_fase'] = orc_id
+                                st.session_state['obra_orc_manage_id'] = orc_id
+
                             # Link para gerenciar serviços
-                            if st.button(f"➕ Gerenciar Serviços", key=f"serv_{fase['id']}"):
-                                st.session_state['fase_selecionada'] = fase['id']
-                                st.session_state['orcamento_para_fase'] = selected_orc
-                                st.session_state['obra_orc_manage_id'] = selected_orc
+                            if st.button(
+                                "➕ Gerenciar Serviços",
+                                key=f"serv_{fase['id']}",
+                                on_click=_selecionar_orcamento_para_fase,
+                                args=(fase['id'], selected_orc),
+                            ):
                                 st.success("Abra a aba Orçamentos para editar os serviços desta fase.")
     
     # ---- ABA AGENDA ----
