@@ -238,6 +238,8 @@ with tab1:
             def atualizar_valor_fase(force: bool = False) -> None:
                 fase_id = st.session_state.get("rec_fase")
                 if not fase_id:
+                    st.session_state['rec_valor'] = 0.0
+                    st.session_state['rec_valor_fase_id'] = None
                     return
                 if not force and st.session_state.get('rec_valor_fase_id') == fase_id:
                     return
@@ -251,7 +253,8 @@ with tab1:
                     .get(fase_id, 0)
                     or 0
                 )
-                st.session_state['rec_valor'] = max(0.0, valor_fase - desconto_fase)
+                ajuste_manual = float(st.session_state.get('rec_ajuste_valor', 0) or 0)
+                st.session_state['rec_valor'] = max(0.0, valor_fase - desconto_fase + ajuste_manual)
                 st.session_state['rec_valor_fase_id'] = fase_id
             
             if orcamentos:
@@ -272,7 +275,8 @@ with tab1:
                         "📑 Fase",
                         options=[f['id'] for f in fases],
                         format_func=lambda x: next((f['nome_fase'] for f in fases if f['id'] == x), '-'),
-                        key="rec_fase"
+                        key="rec_fase",
+                        on_change=lambda: atualizar_valor_fase(force=True)
                     )
 
                     atualizar_valor_fase()
@@ -319,7 +323,20 @@ with tab1:
                         )
                         if desconto_aplicado > 0:
                             st.caption(f"Desconto proporcional aplicado: R$ {desconto_aplicado:,.2f}")
-                        valor = st.number_input("💵 Valor (R$)", min_value=0.0, step=100.0, key="rec_valor")
+                        st.number_input(
+                            "➖➕ Desconto/Acréscimo (R$)",
+                            step=50.0,
+                            key="rec_ajuste_valor",
+                            help="Use valores negativos para desconto e positivos para acréscimo.",
+                            on_change=lambda: atualizar_valor_fase(force=True)
+                        )
+                        valor = st.number_input(
+                            "💵 Valor (R$)",
+                            min_value=0.0,
+                            step=100.0,
+                            key="rec_valor",
+                            disabled=obra_fase_id is None
+                        )
                     
                     with col2:
                         vencimento = st.date_input("📅 Vencimento", value=date.today(), key="rec_venc")
@@ -703,6 +720,27 @@ with tab2:
             success, msg, novo = create_pagamento(dados)
             
             if success:
+                if tipo == 'SEMANAL':
+                    apontamentos_semana = get_apontamentos(
+                        data_inicio=referencia_inicio,
+                        data_fim=referencia_fim
+                    )
+                    itens_falhos = 0
+                    for apontamento in apontamentos_semana:
+                        valor_item = calcular_valor_profissional(apontamento)
+                        item_success, item_msg, novo_item = create_pagamento_item(
+                            novo['id'],
+                            apontamento['id'],
+                            valor_item
+                        )
+                        if item_success:
+                            audit_insert('pagamento_itens', novo_item)
+                        else:
+                            itens_falhos += 1
+                    if not apontamentos_semana:
+                        st.info("Nenhum apontamento encontrado no período selecionado.")
+                    elif itens_falhos > 0:
+                        st.warning("Alguns itens não puderam ser adicionados ao pagamento semanal.")
                 audit_insert('pagamentos', novo)
                 st.success(msg)
                 st.rerun()

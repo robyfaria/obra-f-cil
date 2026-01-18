@@ -913,9 +913,8 @@ elif st.session_state['obra_view'] == 'detalhe':
             data_selecionada = st.date_input(
                 "📆 Data",
                 value=st.session_state['obra_agenda_date'],
-                key="obra_agenda_date_input"
+                key="obra_agenda_date"
             )
-            st.session_state['obra_agenda_date'] = data_selecionada
         with col3:
             if st.button("➡️ Próximo Dia", key="obra_agenda_next"):
                 st.session_state['obra_agenda_date'] = st.session_state['obra_agenda_date'] + timedelta(days=1)
