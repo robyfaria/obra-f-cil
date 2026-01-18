@@ -675,6 +675,8 @@ with tab2:
         with col2:
             referencia_fim = st.date_input("Referência Fim", value=date.today())
         
+        obra_id = None
+        orc_id = None
         obra_fase_id = None
         if tipo == 'POR_FASE':
             obras = get_obras(ativo=True)
@@ -685,13 +687,19 @@ with tab2:
                     format_func=lambda x: next((o['titulo'] for o in obras if o['id'] == x), '-')
                 )
                 
-                orcamentos = [o for o in get_orcamentos_por_obra(obra_id) if o['status'] == 'APROVADO']
+                orcamentos = [
+                    o for o in get_orcamentos_por_obra(obra_id)
+                    if o.get('status') in ['RASCUNHO', 'EMITIDO', 'APROVADO']
+                ]
                 
                 if orcamentos:
                     orc_id = st.selectbox(
-                        "Orçamento Aprovado",
+                        "Orçamento",
                         options=[o['id'] for o in orcamentos],
-                        format_func=lambda x: f"v{next((o['versao'] for o in orcamentos if o['id'] == x), '-')}"
+                        format_func=lambda x: (
+                            f"v{next((o['versao'] for o in orcamentos if o['id'] == x), '-')}"
+                            f" - {next((o['status'] for o in orcamentos if o['id'] == x), '-')}"
+                        )
                     )
                     
                     fases = get_fases_por_orcamento(orc_id)
@@ -704,13 +712,16 @@ with tab2:
                     else:
                         st.warning("Orçamento sem fases cadastradas.")
                 else:
-                    st.warning("Obra sem orçamento aprovado.")
+                    st.warning("Obra sem orçamento disponível.")
             else:
                 st.warning("Nenhuma obra ativa encontrada.")
         
         observacao = st.text_input("Observação")
         
         if st.form_submit_button("✅ Criar Pagamento", type="primary"):
+            if tipo == 'POR_FASE' and (not obra_id or not orc_id or not obra_fase_id):
+                st.warning("Selecione obra, orçamento e fase para pagamento por fase.")
+                st.stop()
             dados = {
                 'tipo': tipo,
                 'referencia_inicio': referencia_inicio.isoformat(),
