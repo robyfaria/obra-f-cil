@@ -905,20 +905,30 @@ elif st.session_state['obra_view'] == 'detalhe':
         st.markdown("### 📅 Agenda desta Obra")
 
         col1, col2, col3 = st.columns([1, 2, 1])
+
+        def _shift_agenda_date(delta_days: int) -> None:
+            st.session_state['obra_agenda_date'] = st.session_state['obra_agenda_date'] + timedelta(days=delta_days)
+
         with col1:
-            if st.button("⬅️ Dia Anterior", key="obra_agenda_prev"):
-                st.session_state['obra_agenda_date'] = st.session_state['obra_agenda_date'] - timedelta(days=1)
-                st.rerun()
+            st.button(
+                "⬅️ Dia Anterior",
+                key="obra_agenda_prev",
+                on_click=_shift_agenda_date,
+                args=(-1,),
+            )
+        with col3:
+            st.button(
+                "➡️ Próximo Dia",
+                key="obra_agenda_next",
+                on_click=_shift_agenda_date,
+                args=(1,),
+            )
+        st.session_state.setdefault('obra_agenda_date', date.today())
         with col2:
             data_selecionada = st.date_input(
                 "📆 Data",
-                value=st.session_state['obra_agenda_date'],
-                key="obra_agenda_date"
+                key="obra_agenda_date",
             )
-        with col3:
-            if st.button("➡️ Próximo Dia", key="obra_agenda_next"):
-                st.session_state['obra_agenda_date'] = st.session_state['obra_agenda_date'] + timedelta(days=1)
-                st.rerun()
 
         st.markdown(f"### 📋 Alocações para {data_selecionada.strftime('%d/%m/%Y')}")
         st.markdown("---")

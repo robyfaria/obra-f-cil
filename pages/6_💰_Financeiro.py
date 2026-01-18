@@ -276,10 +276,9 @@ with tab1:
                         options=[f['id'] for f in fases],
                         format_func=lambda x: next((f['nome_fase'] for f in fases if f['id'] == x), '-'),
                         key="rec_fase",
-                        on_change=lambda: atualizar_valor_fase(force=True)
                     )
 
-                    atualizar_valor_fase()
+                    atualizar_valor_fase(force=True)
 
                     if desconto_orcamento > 0:
                         st.info(f"Desconto do orçamento: R$ {desconto_orcamento:,.2f}")

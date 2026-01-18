@@ -2,10 +2,31 @@
 Módulo de acesso ao banco de dados Supabase
 """
 
+import ast
 import streamlit as st
 from datetime import date, datetime
 from typing import Optional
 from utils.auth import get_supabase_client
+
+
+def _extract_db_error_message(error: Exception) -> str:
+    raw_message = getattr(error, "message", None)
+    if isinstance(raw_message, str) and raw_message.strip():
+        return raw_message.strip()
+
+    raw_text = str(error).strip()
+    if raw_text.startswith("{") and raw_text.endswith("}"):
+        try:
+            payload = ast.literal_eval(raw_text)
+        except (ValueError, SyntaxError):
+            payload = None
+        if isinstance(payload, dict):
+            for key in ("message", "details", "hint"):
+                value = payload.get(key)
+                if isinstance(value, str) and value.strip():
+                    return value.strip()
+
+    return raw_text
 
 
 # ============================================
@@ -576,7 +597,7 @@ def update_fase(fase_id: int, dados: dict) -> tuple[bool, str]:
         return True, "Fase atualizada!"
         
     except Exception as e:
-        return False, f"Erro ao atualizar fase: {e}"
+        return False, f"Erro ao atualizar fase: {_extract_db_error_message(e)}"
 
 
 # ============================================
