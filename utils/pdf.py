@@ -260,30 +260,10 @@ def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -
     pdf.ln(10)
     pdf.set_font('Helvetica', 'I', 9)
     pdf.set_text_color(100, 100, 100)
-    valido_ate = orcamento.get('valido_ate')
-    if isinstance(valido_ate, str):
-        valido_date = datetime.fromisoformat(valido_ate).date()
-    elif isinstance(valido_ate, datetime):
-        valido_date = valido_ate.date()
-    else:
-        valido_date = None
-
-    if valido_date:
-        dias_validade = max((valido_date - emissao_date).days, 0)
-        validade_texto = (
-            f"Orçamento emitido em {emissao_date.strftime('%d/%m/%Y')} "
-            f"com validade até {valido_date.strftime('%d/%m/%Y')} "
-            f"({dias_validade} dias)."
-        )
-    else:
-        validade_texto = (
-            f"Orçamento emitido em {emissao_date.strftime('%d/%m/%Y')}."
-        )
-
     pdf.multi_cell(0, 5,
-        f"{validade_texto}\n"
+        "\n"
         "Condições de pagamento a combinar.\n"
-        "Materiais não inclusos, salvo indicação contrária."
+        "Materiais não inclusos."
     )
     
     # Retorna os bytes do PDF

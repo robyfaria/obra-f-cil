@@ -1064,7 +1064,7 @@ def get_pagamentos(status: Optional[str] = None) -> list:
     try:
         supabase = get_supabase_client()
         
-        query = supabase.table('pagamentos').select('*')
+        query = supabase.table('pagamentos').select('*, pessoas(nome)')
         
         if status:
             query = query.eq('status', status)

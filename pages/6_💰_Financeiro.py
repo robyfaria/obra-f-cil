@@ -13,6 +13,7 @@ from utils.db import (
     update_pagamento, delete_pagamento,
     create_pagamento_item, delete_pagamento_item,
     get_fases_por_orcamento, get_recebimentos_por_orcamento, get_obras, get_orcamentos_por_obra,
+    get_pessoas,
     get_apontamentos
 )
 from utils.auditoria import audit_insert, audit_update, audit_delete
@@ -404,6 +405,9 @@ with tab2:
             key="filter_pag"
         )
 
+    pessoas_ativas = get_pessoas(ativo=True)
+    pessoas_options = {p['id']: p['nome'] for p in pessoas_ativas}
+
     pagamentos = get_pagamentos(status=status_filter_pag)
     if busca_pag:
         busca_lower = busca_pag.lower()
@@ -428,6 +432,15 @@ with tab2:
                 'EXTRA': '⭐',
                 'POR_FASE': '📑'
             }.get(pag.get('tipo', ''), '💵')
+            profissional_nome = (
+                pag.get('pessoas', {}).get('nome')
+                if pag.get('pessoas') else None
+            )
+            profissional_linha = (
+                f"👷 Profissional: {profissional_nome}"
+                if pag.get('tipo') == 'POR_FASE' and profissional_nome
+                else ""
+            )
             
             with st.container():
                 col1, col2, col3, col4 = st.columns([2, 2, 1, 1])
@@ -436,6 +449,7 @@ with tab2:
                     st.markdown(f"""
                     {tipo_emoji} **{pag.get('tipo', '-')}**  
                     📅 Ref: {pag.get('referencia_inicio', '-')} a {pag.get('referencia_fim', '-')}
+                    {profissional_linha}
                     """)
                 
                 with col2:
@@ -507,6 +521,23 @@ with tab2:
                                 value=date.fromisoformat(pag.get('referencia_fim'))
                                 if pag.get('referencia_fim') else date.today()
                             )
+                        profissional_edit_id = None
+                        if tipo_edit == 'POR_FASE':
+                            if pessoas_options:
+                                pessoa_ids = list(pessoas_options.keys())
+                                pessoa_index = (
+                                    pessoa_ids.index(pag.get('pessoa_id'))
+                                    if pag.get('pessoa_id') in pessoa_ids
+                                    else 0
+                                )
+                                profissional_edit_id = st.selectbox(
+                                    "Profissional",
+                                    options=pessoa_ids,
+                                    format_func=lambda x: pessoas_options.get(x, '-'),
+                                    index=pessoa_index
+                                )
+                            else:
+                                st.warning("Nenhum profissional ativo encontrado.")
                         status_edit = st.selectbox(
                             "Status",
                             options=['PENDENTE', 'PAGO', 'CANCELADO'],
@@ -524,7 +555,8 @@ with tab2:
                                     'referencia_inicio': pag.get('referencia_inicio'),
                                     'referencia_fim': pag.get('referencia_fim'),
                                     'status': pag.get('status'),
-                                    'observacao': pag.get('observacao')
+                                    'observacao': pag.get('observacao'),
+                                    'pessoa_id': pag.get('pessoa_id')
                                 }
                                 novos_dados = {
                                     'tipo': tipo_edit,
@@ -533,6 +565,10 @@ with tab2:
                                     'status': status_edit,
                                     'observacao': observacao_edit
                                 }
+                                if tipo_edit == 'POR_FASE':
+                                    novos_dados['pessoa_id'] = profissional_edit_id
+                                else:
+                                    novos_dados['pessoa_id'] = None
                                 if status_edit == 'PAGO' and not pag.get('pago_em'):
                                     novos_dados['pago_em'] = date.today().isoformat()
                                 success, msg = update_pagamento(pag['id'], novos_dados)
@@ -682,9 +718,18 @@ with tab2:
     orc_id = None
     obra_fase_id = None
     valor_pagamento = None
+    profissional_id = None
 
     if tipo == 'POR_FASE':
         obras = get_obras(ativo=True)
+
+        def formatar_fase_label(fase_id: int) -> str:
+            fase_info = next((f for f in fases if f['id'] == fase_id), None)
+            if not fase_info:
+                return '-'
+            ordem = fase_info.get('ordem')
+            nome = fase_info.get('nome_fase', '-')
+            return f"{ordem}. {nome}" if ordem is not None else nome
 
         def atualizar_valor_pagamento(fase_id: int | None) -> None:
             if not fase_id:
@@ -728,15 +773,27 @@ with tab2:
                     obra_fase_id = st.selectbox(
                         "Fase",
                         options=[f['id'] for f in fases],
-                        format_func=lambda x: next((f['nome_fase'] for f in fases if f['id'] == x), '-'),
+                        format_func=formatar_fase_label,
                         key="pag_novo_fase"
                     )
                     atualizar_valor_pagamento(obra_fase_id)
+                    if pessoas_options:
+                        profissional_id = st.selectbox(
+                            "Profissional",
+                            options=list(pessoas_options.keys()),
+                            format_func=lambda x: pessoas_options.get(x, '-'),
+                            key="pag_novo_profissional"
+                        )
+                    else:
+                        st.warning("Nenhum profissional ativo encontrado.")
+                    st.session_state.setdefault(
+                        "pag_novo_valor",
+                        float(st.session_state.get("pag_novo_valor", 0.0) or 0.0),
+                    )
                     valor_pagamento = st.number_input(
                         "Valor (R$)",
                         min_value=0.0,
                         step=100.0,
-                        value=float(st.session_state.get('pag_novo_valor', 0.0) or 0.0),
                         key="pag_novo_valor"
                     )
                 else:
@@ -751,6 +808,8 @@ with tab2:
     if st.button("✅ Criar Pagamento", type="primary", key="pag_novo_submit"):
         if tipo == 'POR_FASE' and (not obra_id or not orc_id or not obra_fase_id):
             st.warning("Selecione obra, orçamento e fase para pagamento por fase.")
+        elif tipo == 'POR_FASE' and not profissional_id:
+            st.warning("Selecione o profissional para pagamento por fase.")
         else:
             dados = {
                 'tipo': tipo,
@@ -764,6 +823,8 @@ with tab2:
                 dados['obra_fase_id'] = obra_fase_id
             if tipo == 'POR_FASE' and valor_pagamento is not None:
                 dados['valor_total'] = float(valor_pagamento)
+            if tipo == 'POR_FASE' and profissional_id:
+                dados['pessoa_id'] = profissional_id
 
             success, msg, novo = create_pagamento(dados)
 

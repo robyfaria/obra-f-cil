@@ -294,6 +294,7 @@ create table public.pagamentos (
   referencia_inicio date,
   referencia_fim date,
   obra_fase_id bigint references public.obra_fases(id) on update cascade on delete set null,
+  pessoa_id bigint references public.pessoas(id) on update cascade on delete set null,
   valor_total numeric(12,2) not null default 0,
   status varchar(20) not null default 'PENDENTE' check (status in ('PENDENTE','PAGO','CANCELADO')),
   pago_em date,
@@ -303,6 +304,7 @@ create table public.pagamentos (
 
 create index idx_pag_status on public.pagamentos(status);
 create index idx_pag_ref on public.pagamentos(referencia_inicio, referencia_fim);
+create index idx_pag_pessoa on public.pagamentos(pessoa_id);
 
 create table public.pagamento_itens (
   id bigserial primary key,

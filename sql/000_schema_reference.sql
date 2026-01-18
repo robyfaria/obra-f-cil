@@ -150,6 +150,7 @@ CREATE TABLE public.pagamentos (
     referencia_inicio DATE,
     referencia_fim DATE,
     obra_fase_id BIGINT REFERENCES public.obra_fases(id),
+    pessoa_id BIGINT REFERENCES public.pessoas(id),
     valor_total DECIMAL(12,2) DEFAULT 0,
     status VARCHAR(20) DEFAULT 'PENDENTE' CHECK (status IN ('PENDENTE', 'PAGO', 'CANCELADO')),
     pago_em DATE,
