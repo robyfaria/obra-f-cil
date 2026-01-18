@@ -13,7 +13,7 @@ from utils.db import (
     update_orcamento_desconto, update_fase, update_orcamento_validade
 )
 from utils.auditoria import audit_insert, audit_update, audit_delete
-from utils.pdf import gerar_pdf_orcamento, salvar_pdf_storage
+from utils.pdf import gerar_pdf_orcamento
 from utils.layout import render_sidebar, render_top_logo
 
 # Requer autenticação
@@ -133,6 +133,10 @@ for fase in fases:
         
         # Lista serviços da fase
         servicos_fase = get_servicos_fase(fase['id'])
+        servicos_fase = [
+            serv for serv in servicos_fase
+            if serv.get('servicos', {}).get('ativo', True)
+        ]
         
         if servicos_fase:
             for serv in servicos_fase:
@@ -292,10 +296,9 @@ st.markdown("---")
 
 st.markdown("### 5️⃣ Gerar PDF")
 
-pdf_url = orcamento.get('pdf_url')
-pdf_disponivel = bool(pdf_url)
+pdf_state_key = f"pdf_bytes_{orc_selecionado}"
 
-if st.button("📄 Gerar PDF do Orçamento", type="primary", disabled=pdf_disponivel):
+if st.button("📄 Gerar PDF do Orçamento", type="primary"):
     with st.spinner("Gerando PDF..."):
         # Prepara dados
         fases = get_fases_por_orcamento(orc_selecionado)
@@ -322,23 +325,19 @@ if st.button("📄 Gerar PDF do Orçamento", type="primary", disabled=pdf_dispon
 
         # Gera o PDF
         pdf_bytes = gerar_pdf_orcamento(orcamento_pdf, fases, servicos_por_fase)
-        
-        # Salva no storage e no banco
-        obra_titulo = orcamento.get('obras', {}).get('titulo', 'obra')
-        url, error = salvar_pdf_storage(
-            pdf_bytes,
-            orc_selecionado,
-            obra_titulo,
-            data_emissao,
-            valido_ate,
-        )
-        if url:
-            pdf_url = url
-            pdf_disponivel = True
-            st.success("PDF gerado e salvo no servidor!")
-        else:
-            error_msg = f" (Detalhes: {error})" if error else ""
-            st.error(f"Não foi possível salvar o PDF no servidor.{error_msg}")
 
-if pdf_disponivel:
-    st.link_button("⬇️ Baixar PDF", pdf_url, type="secondary")
+        st.session_state[pdf_state_key] = {
+            "bytes": pdf_bytes,
+            "filename": f"orcamento_{orc_selecionado}.pdf",
+        }
+        st.success("PDF gerado! Baixe abaixo.")
+
+pdf_payload = st.session_state.get(pdf_state_key)
+if pdf_payload:
+    st.download_button(
+        "⬇️ Baixar PDF",
+        data=pdf_payload["bytes"],
+        file_name=pdf_payload["filename"],
+        mime="application/pdf",
+        type="secondary",
+    )

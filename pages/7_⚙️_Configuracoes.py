@@ -5,7 +5,10 @@ Página de Configurações - Usuários e Auditoria (ADMIN only)
 import streamlit as st
 from datetime import date, timedelta
 from utils.auth import require_admin
-from utils.db import get_usuarios_app, update_usuario_app, get_auditoria, get_servicos, create_servico
+from utils.db import (
+    get_usuarios_app, update_usuario_app, get_auditoria,
+    get_servicos, create_servico, update_servico
+)
 from utils.auditoria import audit_update, audit_insert
 from utils.layout import render_sidebar, render_top_logo
 
@@ -144,7 +147,30 @@ with tab3:
     if servicos:
         for serv in servicos:
             status_icon = "🟢" if serv.get('ativo', True) else "🔴"
-            st.markdown(f"{status_icon} **{serv['nome']}** ({serv.get('unidade', '-')})")
+            with st.expander(f"{status_icon} {serv['nome']} ({serv.get('unidade', '-')})"):
+                ativo_atual = serv.get('ativo', True)
+                ativo_novo = st.toggle(
+                    "Ativo",
+                    value=ativo_atual,
+                    key=f"serv_ativo_{serv['id']}"
+                )
+
+                if st.button("💾 Atualizar Serviço", key=f"serv_update_{serv['id']}"):
+                    if ativo_novo == ativo_atual:
+                        st.info("Nenhuma alteração para salvar.")
+                    else:
+                        antes = {'ativo': ativo_atual}
+                        success, msg, atualizado = update_servico(
+                            serv['id'],
+                            {'ativo': ativo_novo}
+                        )
+
+                        if success:
+                            audit_update('servicos', serv['id'], antes, {'ativo': ativo_novo})
+                            st.success(msg)
+                            st.rerun()
+                        else:
+                            st.error(msg)
     else:
         st.info("📋 Nenhum serviço cadastrado.")
     

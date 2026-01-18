@@ -1,0 +1,39 @@
+[[pages]]
+path = "app.py"
+name = "Home"
+icon = "🏠"
+
+[[pages]]
+path = "pages/1_🏠_Obras.py"
+name = "Obras"
+icon = "🏠"
+
+[[pages]]
+path = "pages/2_👥_Clientes.py"
+name = "Clientes"
+icon = "👥"
+
+[[pages]]
+path = "pages/3_👷_Pessoas.py"
+name = "Pessoas"
+icon = "👷"
+
+[[pages]]
+path = "pages/4_📋_Orcamentos.py"
+name = "Orçamentos"
+icon = "📋"
+
+[[pages]]
+path = "pages/5_📅_Agenda.py"
+name = "Agenda"
+icon = "📅"
+
+[[pages]]
+path = "pages/6_💰_Financeiro.py"
+name = "Financeiro"
+icon = "💰"
+
+[[pages]]
+path = "pages/7_⚙️_Configuracoes.py"
+name = "Configurações"
+icon = "⚙️"

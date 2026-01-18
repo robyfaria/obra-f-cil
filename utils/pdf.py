@@ -5,10 +5,8 @@ Usa fpdf2 para gerar PDFs simples e legíveis
 
 from fpdf import FPDF
 from datetime import datetime
-from io import BytesIO
-from typing import Optional
 from pathlib import Path
-from utils.auth import get_supabase_client
+from typing import Optional
 
 LOGO_PATH = Path(__file__).resolve().parents[1] / "assets" / "logo.png"
 
@@ -174,7 +172,7 @@ def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -
         
         # Subtotal da fase
         pdf.set_font('Helvetica', 'B', 10)
-        subtotal_label = "Subtotal:"
+        subtotal_label = "Mão-de-obra:"
         label_width = pdf.epw * 0.7
         value_width = pdf.epw - label_width
         line_height = 6
@@ -254,63 +252,3 @@ def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -
     elif isinstance(pdf_bytes, bytearray):
         pdf_bytes = bytes(pdf_bytes)
     return pdf_bytes
-
-
-def salvar_pdf_storage(
-    pdf_bytes: bytes,
-    orcamento_id: int,
-    obra_titulo: str,
-    data_emissao: datetime,
-    valido_ate: Optional[datetime],
-) -> tuple[Optional[str], Optional[str]]:
-    """
-    Salva o PDF no Supabase Storage e retorna a URL
-    
-    Args:
-        pdf_bytes: Conteúdo do PDF
-        orcamento_id: ID do orçamento
-        obra_titulo: Título da obra (para nome do arquivo)
-        
-    Returns:
-        URL pública do arquivo ou None se falhar
-    """
-    try:
-        supabase = get_supabase_client()
-        
-        # Nome do arquivo fixo para permitir substituição
-        filename = f"orcamento_{orcamento_id}.pdf"
-        
-        # Upload para o bucket 'orcamentos'
-        supabase.storage \
-            .from_('orcamentos') \
-            .upload(
-                filename,
-                BytesIO(pdf_bytes),
-                {
-                    'content-type': 'application/pdf'
-                }
-            )
-        
-        # Gera URL pública
-        url = supabase.storage \
-            .from_('orcamentos') \
-            .get_public_url(filename)
-        
-        # Salva a URL no campo dedicado do orçamento
-        update_payload = {
-            'pdf_url': url,
-            'pdf_emitido_em': data_emissao.isoformat(),
-        }
-        if valido_ate:
-            update_payload['valido_ate'] = valido_ate.date().isoformat()
-
-        supabase.table('orcamentos') \
-            .update(update_payload) \
-            .eq('id', orcamento_id) \
-            .execute()
-        
-        return url, None
-        
-    except Exception as e:
-        print(f"Erro ao salvar PDF no storage: {e}")
-        return None, str(e)

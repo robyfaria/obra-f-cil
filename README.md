@@ -74,14 +74,14 @@ Para deploy no Streamlit Cloud, adicione as mesmas chaves em **Settings > Secret
 - **Autenticação**: Supabase Auth com verificação de perfil em `public.usuarios_app`.
 - **Dados**: Camada de acesso em `utils/db.py` consumindo PostgREST do Supabase.
 - **Auditoria**: Triggers em Postgres gravando histórico em tabela de auditoria.
-- **PDF**: Geração local via `fpdf2` e upload para Supabase Storage (`bucket orcamentos`).
+- **PDF**: Geração local via `fpdf2` com download direto na UI.
 
 ## Fluxo de dados
 
 1. **Login** → App chama Supabase Auth e grava sessão local.
 2. **Carregamento de telas** → `utils/db.py` consulta tabelas e views.
 3. **Escrita** → App envia inserts/updates → triggers recalculam totais e registram auditoria.
-4. **Orçamentos (PDF)** → `utils/pdf.py` gera o arquivo → upload no Storage → URL pública salva no orçamento.
+4. **Orçamentos (PDF)** → `utils/pdf.py` gera o arquivo → download direto na UI.
 
 ## Decisões técnicas
 
@@ -98,8 +98,7 @@ flowchart LR
     UI -->|CRUD| DB[(Postgres)]
     DB -->|Triggers de cálculo/auditoria| TRG[Triggers]
     UI -->|Gera PDF| PDF[fpdf2]
-    PDF -->|Upload| STO[Supabase Storage]
-    STO -->|URL pública| DB
+    PDF -->|Download| UI
 ```
 
 ## Estrutura do Projeto

@@ -179,8 +179,15 @@ with tab1:
 
 with tab2:
     st.markdown("### 📤 Pagamentos")
-    
-    pagamentos = get_pagamentos()
+
+    status_filter_pag = st.selectbox(
+        "Filtrar por Status",
+        options=['', 'PENDENTE', 'PAGO', 'CANCELADO'],
+        format_func=lambda x: 'Todos' if x == '' else x,
+        key="filter_pag"
+    )
+
+    pagamentos = get_pagamentos(status=status_filter_pag if status_filter_pag else None)
     
     if not pagamentos:
         st.info("📋 Nenhum pagamento encontrado.")
