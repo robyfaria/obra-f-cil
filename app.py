@@ -10,7 +10,7 @@ from utils.layout import render_centered_logo, render_sidebar, render_top_logo
 # Configuração da página
 st.set_page_config(
     page_title="Gestão de Obras",
-    page_icon="🎨",
+    page_icon="assets/icon.ico",
     layout="wide",
     initial_sidebar_state="expanded"
 )
