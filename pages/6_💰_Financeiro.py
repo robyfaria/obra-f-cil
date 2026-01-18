@@ -40,6 +40,10 @@ if 'rec_desconto_rateio' not in st.session_state:
     st.session_state['rec_desconto_rateio'] = {}
 if 'rec_valor_fase_id' not in st.session_state:
     st.session_state['rec_valor_fase_id'] = None
+if 'pag_novo_valor_fase_id' not in st.session_state:
+    st.session_state['pag_novo_valor_fase_id'] = None
+if 'pag_novo_valor' not in st.session_state:
+    st.session_state['pag_novo_valor'] = 0.0
 
 tab1, tab2, tab3 = st.tabs(["📥 Recebimentos", "📤 Pagamentos", "📄 Relatório"])
 
@@ -665,63 +669,89 @@ with tab2:
                                     st.error(msg)
     
     st.markdown("### ➕ Novo Pagamento")
-    
-    with st.form("form_novo_pagamento"):
-        tipo = st.selectbox("Tipo", options=['SEMANAL', 'EXTRA', 'POR_FASE'])
-        
-        col1, col2 = st.columns(2)
-        with col1:
-            referencia_inicio = st.date_input("Referência Início", value=date.today())
-        with col2:
-            referencia_fim = st.date_input("Referência Fim", value=date.today())
-        
-        obra_id = None
-        orc_id = None
-        obra_fase_id = None
-        if tipo == 'POR_FASE':
-            obras = get_obras(ativo=True)
-            if obras:
-                obra_id = st.selectbox(
-                    "Obra",
-                    options=[o['id'] for o in obras],
-                    format_func=lambda x: next((o['titulo'] for o in obras if o['id'] == x), '-')
+
+    tipo = st.selectbox("Tipo", options=['SEMANAL', 'EXTRA', 'POR_FASE'], key="pag_novo_tipo")
+
+    col1, col2 = st.columns(2)
+    with col1:
+        referencia_inicio = st.date_input("Referência Início", value=date.today(), key="pag_ref_ini")
+    with col2:
+        referencia_fim = st.date_input("Referência Fim", value=date.today(), key="pag_ref_fim")
+
+    obra_id = None
+    orc_id = None
+    obra_fase_id = None
+    valor_pagamento = None
+
+    if tipo == 'POR_FASE':
+        obras = get_obras(ativo=True)
+
+        def atualizar_valor_pagamento(fase_id: int | None) -> None:
+            if not fase_id:
+                st.session_state['pag_novo_valor'] = 0.0
+                st.session_state['pag_novo_valor_fase_id'] = None
+                return
+            if st.session_state.get('pag_novo_valor_fase_id') == fase_id:
+                return
+            fase_info = next((f for f in fases if f['id'] == fase_id), None)
+            if not fase_info:
+                return
+            st.session_state['pag_novo_valor'] = float(fase_info.get('valor_fase', 0) or 0)
+            st.session_state['pag_novo_valor_fase_id'] = fase_id
+
+        if obras:
+            obra_id = st.selectbox(
+                "Obra",
+                options=[o['id'] for o in obras],
+                format_func=lambda x: next((o['titulo'] for o in obras if o['id'] == x), '-'),
+                key="pag_novo_obra"
+            )
+
+            orcamentos = [
+                o for o in get_orcamentos_por_obra(obra_id)
+                if o.get('status') in ['RASCUNHO', 'EMITIDO', 'APROVADO']
+            ]
+
+            if orcamentos:
+                orc_id = st.selectbox(
+                    "Orçamento",
+                    options=[o['id'] for o in orcamentos],
+                    format_func=lambda x: (
+                        f"v{next((o['versao'] for o in orcamentos if o['id'] == x), '-')}"
+                        f" - {next((o['status'] for o in orcamentos if o['id'] == x), '-')}"
+                    ),
+                    key="pag_novo_orc"
                 )
-                
-                orcamentos = [
-                    o for o in get_orcamentos_por_obra(obra_id)
-                    if o.get('status') in ['RASCUNHO', 'EMITIDO', 'APROVADO']
-                ]
-                
-                if orcamentos:
-                    orc_id = st.selectbox(
-                        "Orçamento",
-                        options=[o['id'] for o in orcamentos],
-                        format_func=lambda x: (
-                            f"v{next((o['versao'] for o in orcamentos if o['id'] == x), '-')}"
-                            f" - {next((o['status'] for o in orcamentos if o['id'] == x), '-')}"
-                        )
+
+                fases = get_fases_por_orcamento(orc_id)
+                if fases:
+                    obra_fase_id = st.selectbox(
+                        "Fase",
+                        options=[f['id'] for f in fases],
+                        format_func=lambda x: next((f['nome_fase'] for f in fases if f['id'] == x), '-'),
+                        key="pag_novo_fase"
                     )
-                    
-                    fases = get_fases_por_orcamento(orc_id)
-                    if fases:
-                        obra_fase_id = st.selectbox(
-                            "Fase",
-                            options=[f['id'] for f in fases],
-                            format_func=lambda x: next((f['nome_fase'] for f in fases if f['id'] == x), '-')
-                        )
-                    else:
-                        st.warning("Orçamento sem fases cadastradas.")
+                    atualizar_valor_pagamento(obra_fase_id)
+                    valor_pagamento = st.number_input(
+                        "Valor (R$)",
+                        min_value=0.0,
+                        step=100.0,
+                        value=float(st.session_state.get('pag_novo_valor', 0.0) or 0.0),
+                        key="pag_novo_valor"
+                    )
                 else:
-                    st.warning("Obra sem orçamento disponível.")
+                    st.warning("Orçamento sem fases cadastradas.")
             else:
-                st.warning("Nenhuma obra ativa encontrada.")
-        
-        observacao = st.text_input("Observação")
-        
-        if st.form_submit_button("✅ Criar Pagamento", type="primary"):
-            if tipo == 'POR_FASE' and (not obra_id or not orc_id or not obra_fase_id):
-                st.warning("Selecione obra, orçamento e fase para pagamento por fase.")
-                st.stop()
+                st.warning("Obra sem orçamento disponível.")
+        else:
+            st.warning("Nenhuma obra ativa encontrada.")
+
+    observacao = st.text_input("Observação", key="pag_novo_obs")
+
+    if st.button("✅ Criar Pagamento", type="primary", key="pag_novo_submit"):
+        if tipo == 'POR_FASE' and (not obra_id or not orc_id or not obra_fase_id):
+            st.warning("Selecione obra, orçamento e fase para pagamento por fase.")
+        else:
             dados = {
                 'tipo': tipo,
                 'referencia_inicio': referencia_inicio.isoformat(),
@@ -729,12 +759,14 @@ with tab2:
                 'status': 'PENDENTE',
                 'observacao': observacao
             }
-            
+
             if obra_fase_id:
                 dados['obra_fase_id'] = obra_fase_id
-            
+            if tipo == 'POR_FASE' and valor_pagamento is not None:
+                dados['valor_total'] = float(valor_pagamento)
+
             success, msg, novo = create_pagamento(dados)
-            
+
             if success:
                 if tipo == 'SEMANAL':
                     apontamentos_semana = get_apontamentos(
