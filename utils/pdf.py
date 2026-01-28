@@ -86,16 +86,35 @@ def quebrar_texto_em_linhas(pdf: FPDF, texto: str, largura_max: float) -> list[s
     if not palavras:
         return [""]
 
-    linhas = []
+    linhas: list[str] = []
     linha_atual = ""
+
     for palavra in palavras:
         teste = f"{linha_atual} {palavra}".strip()
         if pdf.get_string_width(teste) <= largura_max:
             linha_atual = teste
-        else:
-            if linha_atual:
-                linhas.append(linha_atual)
+            continue
+
+        if linha_atual:
+            linhas.append(linha_atual)
+            linha_atual = ""
+
+        if pdf.get_string_width(palavra) <= largura_max:
             linha_atual = palavra
+            continue
+
+        pedaco = ""
+        for caractere in palavra:
+            teste_pedaco = f"{pedaco}{caractere}"
+            if pdf.get_string_width(teste_pedaco) <= largura_max:
+                pedaco = teste_pedaco
+            else:
+                if pedaco:
+                    linhas.append(pedaco)
+                pedaco = caractere
+
+        if pedaco:
+            linhas.append(pedaco)
 
     if linha_atual:
         linhas.append(linha_atual)
@@ -206,7 +225,9 @@ def gerar_pdf_orcamento(orcamento: dict, fases: list, servicos_por_fase: dict) -
             for serv in servicos:
                 servico_info = serv.get('servicos', {})
                 nome = normalizar_texto(servico_info.get('nome'))
-                pdf.multi_cell(0, 5, f"- {nome}")
+                linhas_servico = quebrar_texto_em_linhas(pdf, f"- {nome}", pdf.epw)
+                for linha in linhas_servico:
+                    pdf.cell(0, 5, linha, ln=True)
         else:
             pdf.set_font('Helvetica', 'I', 9)
             pdf.cell(0, 6, '  Nenhum serviço cadastrado nesta fase', ln=True)

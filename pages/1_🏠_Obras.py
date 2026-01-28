@@ -791,23 +791,9 @@ elif st.session_state['obra_view'] == 'detalhe':
                     for fase in fases_pdf:
                         servicos_por_fase[fase['id']] = get_servicos_fase(fase['id'])
 
-                    valido_ate = orcamento.get('valido_ate')
-                    if isinstance(valido_ate, str):
-                        try:
-                            valido_ate = date.fromisoformat(valido_ate)
-                        except ValueError:
-                            valido_ate = datetime.fromisoformat(valido_ate).date()
-                    elif isinstance(valido_ate, datetime):
-                        valido_ate = valido_ate.date()
-
-                    if not valido_ate:
-                        st.error("Defina a validade do orçamento antes de gerar o PDF.")
-                        st.stop()
-
                     data_emissao = date.today()
                     orcamento_pdf = dict(orcamento)
                     orcamento_pdf['pdf_emitido_em'] = data_emissao.isoformat()
-                    orcamento_pdf['valido_ate'] = valido_ate.isoformat()
 
                     pdf_bytes = gerar_pdf_orcamento(orcamento_pdf, fases_pdf, servicos_por_fase)
 
