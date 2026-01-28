@@ -13,6 +13,7 @@ from utils.db import (
     get_pessoas, create_apontamento, update_apontamento, delete_apontamento,
     get_orcamento, get_servicos, add_servico_fase, update_servico_fase,
     delete_servico_fase, create_servico, create_fase, delete_fase, update_fase,
+    update_servico,
     update_orcamento_desconto, update_orcamento_validade,
     get_recebimentos_por_orcamento, create_recebimento,
     get_alocacoes_dia, create_alocacao, delete_alocacao, update_alocacao_confirmada,
@@ -392,6 +393,25 @@ elif st.session_state['obra_view'] == 'detalhe':
                                 success, msg = update_orcamento_status(orc['id'], 'CANCELADO')
                                 if success:
                                     audit_status_change('orcamentos', orc['id'], orc['status'], 'CANCELADO')
+                                    fases_orcamento = get_fases_por_orcamento(orc['id'])
+                                    for fase in fases_orcamento:
+                                        if fase.get('status') != 'CANCELADO':
+                                            antes = {'status': fase.get('status')}
+                                            fase_success, fase_msg = update_fase(
+                                                fase['id'],
+                                                {'status': 'CANCELADO'}
+                                            )
+                                            if fase_success:
+                                                audit_update(
+                                                    'obra_fases',
+                                                    fase['id'],
+                                                    antes,
+                                                    {'status': 'CANCELADO'}
+                                                )
+                                            else:
+                                                st.error(
+                                                    f"Erro ao cancelar fase {fase.get('nome_fase', '-')}: {fase_msg}"
+                                                )
                                     st.success(msg)
                                     st.rerun()
 
@@ -598,6 +618,22 @@ elif st.session_state['obra_view'] == 'detalhe':
                                 with st.form(f"form_edit_serv_obra_{serv['id']}"):
                                     col1, col2 = st.columns(2)
                                     with col1:
+                                        nome_servico_edit = st.text_input(
+                                            "Nome do Serviço",
+                                            value=serv_info.get('nome', '') or ''
+                                        )
+                                    with col2:
+                                        unidade_opcoes = ['UN', 'M2', 'ML', 'H', 'DIA']
+                                        unidade_atual = serv_info.get('unidade', 'UN') or 'UN'
+                                        if unidade_atual not in unidade_opcoes:
+                                            unidade_atual = 'UN'
+                                        unidade_servico_edit = st.selectbox(
+                                            "Unidade",
+                                            options=unidade_opcoes,
+                                            index=unidade_opcoes.index(unidade_atual)
+                                        )
+                                    col1, col2 = st.columns(2)
+                                    with col1:
                                         quantidade_edit = st.number_input(
                                             "Quantidade",
                                             min_value=0.01,
@@ -618,6 +654,15 @@ elif st.session_state['obra_view'] == 'detalhe':
                                     col1, col2 = st.columns(2)
                                     with col1:
                                         if st.form_submit_button("💾 Salvar Serviço", type="primary"):
+                                            servico_id = serv.get('servico_id')
+                                            servico_antes = {
+                                                'nome': serv_info.get('nome'),
+                                                'unidade': serv_info.get('unidade')
+                                            }
+                                            servico_novos = {
+                                                'nome': nome_servico_edit.strip(),
+                                                'unidade': unidade_servico_edit
+                                            }
                                             antes = {
                                                 'quantidade': serv.get('quantidade'),
                                                 'valor_unit': serv.get('valor_unit'),
@@ -634,6 +679,21 @@ elif st.session_state['obra_view'] == 'detalhe':
                                                 orc_manage_id
                                             )
                                             if success:
+                                                if servico_id and servico_novos != servico_antes:
+                                                    serv_success, serv_msg, atualizado = update_servico(
+                                                        servico_id,
+                                                        servico_novos
+                                                    )
+                                                    if serv_success:
+                                                        audit_update(
+                                                            'servicos',
+                                                            servico_id,
+                                                            servico_antes,
+                                                            servico_novos
+                                                        )
+                                                    else:
+                                                        st.error(serv_msg)
+                                                        st.stop()
                                                 audit_update('orcamento_fase_servicos', serv['id'], antes, novos_dados)
                                                 st.session_state['obra_servico_edit_id'] = None
                                                 st.success(msg)
@@ -852,10 +912,14 @@ elif st.session_state['obra_view'] == 'detalhe':
                         with st.expander(f"{fase['ordem']}. {fase['nome_fase']} {status_fase} - R$ {fase.get('valor_fase', 0):,.2f}"):
                             col1, col2 = st.columns([2, 1])
                             with col1:
+                                status_opcoes = ['PENDENTE', 'EM_ANDAMENTO', 'CONCLUIDA', 'CANCELADO']
+                                status_atual = fase.get('status', 'PENDENTE')
+                                if status_atual not in status_opcoes:
+                                    status_atual = 'PENDENTE'
                                 novo_status = st.selectbox(
                                     "Status da Fase",
-                                    options=['PENDENTE', 'EM_ANDAMENTO', 'CONCLUIDA'],
-                                    index=['PENDENTE', 'EM_ANDAMENTO', 'CONCLUIDA'].index(fase.get('status', 'PENDENTE')),
+                                    options=status_opcoes,
+                                    index=status_opcoes.index(status_atual),
                                     key=f"fase_status_{fase['id']}"
                                 )
                             with col2:
